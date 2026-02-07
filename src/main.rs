@@ -50,7 +50,7 @@ fn get_clock_emoji_for_hour(hour: u32) -> &'static str {
 
 async fn send_message(chan: &ChannelId, http: impl CacheHttp, msg: impl Into<String>) {
     if let Err(err) = chan.say(http, msg).await {
-        eprintln!("failed to send message: {err:?}");
+        println!("failed to send message: {err:?}");
     }
 }
 
@@ -72,7 +72,7 @@ async fn start_time_checking_loop(ctx: Context) {
         } else {
             "STEM Center (1st floor library)"
         };
-        if dt.hour() == (MEETING_HOUR - 1) {
+        if dt.hour() == (MEETING_HOUR - 1) { // FIXME!!! potential underflow!!!
             if dt.minute() >= ANNOUNCEMENT_OFFSET_MINS {
                 let meet_time = get_meeting_time_for_today();
                 let seconds_since_epoch = meet_time.timestamp();
@@ -92,7 +92,7 @@ async fn start_time_checking_loop(ctx: Context) {
 
                 if let Ok(msg) = chan.send_message(&ctx.http, msg).await {
                     if let Err(why) = msg.react(&ctx.http, ReactionType::Unicode("\u{2705}".into())).await {
-                        eprintln!("failed to send message: {why:?}");
+                        println!("failed to send message: {why:?}");
                     }
                 }
 
@@ -106,16 +106,8 @@ async fn start_time_checking_loop(ctx: Context) {
 
 #[async_trait]
 impl EventHandler for Handler {
-    async fn message(&self, ctx: Context, msg: Message) {
-        if msg.content == "!ping" {
-            send_message(&msg.channel_id, &ctx.http, "Pong!").await;
-        } else if msg.content == "!day" {
-            let now = Utc::now();
-            let day = now.weekday();
-            let epoch = now.timestamp();
-
-            send_message(&msg.channel_id, &ctx.http, format!("Today is {day} <t:{epoch}:R>")).await;
-        }
+    async fn message(&self, _ctx: Context, _msg: Message) {
+        
     }
 
     async fn ready(&self, ctx: Context, data_about_bot: Ready) {
@@ -131,6 +123,7 @@ impl EventHandler for Handler {
 
         Command::create_global_command(&ctx.http, commands::info::register()).await.expect("info command");
         Command::create_global_command(&ctx.http, commands::shutdown::register()).await.expect("shutdown command");
+        Command::create_global_command(&ctx.http, commands::announce::register()).await.expect("announce command");
 
         let ctx = ctx.clone();
         tokio::spawn(async move {
@@ -143,8 +136,9 @@ impl EventHandler for Handler {
             match cmd.data.name.as_str() {
                 "info" => commands::info::run(&ctx, cmd).await,
                 "shutdown" => commands::shutdown::run(&ctx, cmd).await,
+                "announce" => commands::announce::run(&ctx, cmd).await,
 
-                _ => eprintln!("called unimplemented cmd"),
+                _ => println!("called unimplemented cmd"),
             };
         }
     }
@@ -179,25 +173,6 @@ async fn main() {
             .expect("Error creating client.");
 
     if let Err(why) = client.start().await {
-        eprintln!("client error: {why:?}");
+        println!("client error: {why:?}");
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use chrono::{Datelike, Local, NaiveDate, Weekday};
-
-//     #[test]
-//     fn datetime() {
-//         let fri = NaiveDate::from_weekday_of_month_opt(2026, 2, Weekday::Fri, 1).expect("hmm");
-
-//         let dt = Local::now();
-        
-//         let today = dt.weekday();
-//         let timestamp = dt.timestamp_millis();
-//         println!("hi: {fri}, today is a {today}");
-        
-        
-//         assert!(false);
-//     }
-// }
