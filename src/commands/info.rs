@@ -1,4 +1,4 @@
-use serenity::all::{CommandInteraction, Context, CreateInteractionResponse, CreateInteractionResponseMessage, ResolvedOption};
+use serenity::all::{CommandInteraction, Context, CreateInteractionResponse, CreateInteractionResponseMessage};
 use serenity::builder::CreateCommand;
 
 const INFO: &str = r#"
