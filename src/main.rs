@@ -6,7 +6,7 @@ use serenity::builder::CreateEmbed;
 use serenity::{all::{ChannelId, Message}, async_trait, prelude::*};
 use std::time::Duration;
 
-const ANNOUNCEMENT_OFFSET_MINS: u32 = 30;
+const ANNOUNCEMENT_OFFSET_MINS: u32 = 0;
 
 #[cfg(not(debug_assertions))]
 const MEETING_HOUR: u32 = 12;
@@ -14,8 +14,7 @@ const MEETING_HOUR: u32 = 12;
 const MEETING_END: u32 = 14;
 
 #[cfg(debug_assertions)]
-const MEETING_HOUR: u32 = 20;
-
+const MEETING_HOUR: u32 = 13;
 
 #[cfg(debug_assertions)]
 const ANNOUNCEMENT_CHANNEL_ID: u64 = 839277529511755786;
@@ -27,7 +26,7 @@ const ANNOUNCEMENT_CHANNEL_ID: u64 = 1153591616301432834;
 const UPDATE_RATE: Duration = Duration::from_secs(1);
 
 #[cfg(not(debug_assertions))]
-const UPDATE_RATE: Duration = Duration::from_mins(5);
+const UPDATE_RATE: Duration = Duration::from_mins(1);
 
 // why not
 fn get_clock_emoji_for_hour(hour: u32) -> &'static str {
