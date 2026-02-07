@@ -1,6 +1,6 @@
 mod commands;
 
-use chrono::{DateTime, Datelike, Local, Timelike, Utc, Weekday};
+use chrono::{DateTime, Datelike, Local, Timelike, Weekday};
 use serenity::all::{ActivityData, Color, Command, CreateEmbedFooter, CreateMessage, Interaction, OnlineStatus, ReactionType, Ready};
 use serenity::builder::CreateEmbed;
 use serenity::{all::{ChannelId, Message}, async_trait, prelude::*};
@@ -13,8 +13,11 @@ const MEETING_HOUR: u32 = 12;
 
 const MEETING_END: u32 = 14;
 
+const STATUSES: &[&str] = &["engineering...", "programming...", "procrastinating..."];
+const STATUS_TIME: Duration = Duration::from_mins(2);
+
 #[cfg(debug_assertions)]
-const MEETING_HOUR: u32 = 13;
+const MEETING_HOUR: u32 = 14;
 
 #[cfg(debug_assertions)]
 const ANNOUNCEMENT_CHANNEL_ID: u64 = 839277529511755786;
@@ -48,12 +51,6 @@ fn get_clock_emoji_for_hour(hour: u32) -> &'static str {
     }
 }
 
-async fn send_message(chan: &ChannelId, http: impl CacheHttp, msg: impl Into<String>) {
-    if let Err(err) = chan.say(http, msg).await {
-        println!("failed to send message: {err:?}");
-    }
-}
-
 struct Handler;
 
 // TODO: cleanup
@@ -80,9 +77,10 @@ async fn start_time_checking_loop(ctx: Context) {
                 let meeting_end_epoch_time = get_end_meeting_time_for_today().timestamp();
 
                 let msg = CreateMessage::new()
+                    .content("@everyone")
                     .embed(CreateEmbed::new()
                         .title("🎉 Meeting Alert 🚨")
-                        .description(format!("@everyone We will have a meeting <t:{seconds_since_epoch}:R>"))
+                        .description(format!("There will be a meeting today <t:{seconds_since_epoch}:R>"))
                         .color(Color::DARK_GREEN)
                         .field("Location 🪐", desired_location, true)
                         .field(format!("Until {}", get_clock_emoji_for_hour(MEETING_END)), format!("<t:{meeting_end_epoch_time}:t>"), true)
@@ -113,22 +111,39 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, data_about_bot: Ready) {
         println!("connected to {}", data_about_bot.user.name);
 
-        #[cfg(debug_assertions)]
-        {
-            ctx.set_presence(Some(ActivityData::playing("debug mode")), OnlineStatus::Online);
-        } #[cfg(not(debug_assertions))]
-        {
-            ctx.set_presence(Some(ActivityData::custom("Engineering ...")), OnlineStatus::Online);
-        }
+        
 
         Command::create_global_command(&ctx.http, commands::info::register()).await.expect("info command");
         Command::create_global_command(&ctx.http, commands::shutdown::register()).await.expect("shutdown command");
         Command::create_global_command(&ctx.http, commands::announce::register()).await.expect("announce command");
 
-        let ctx = ctx.clone();
-        tokio::spawn(async move {
-            start_time_checking_loop(ctx).await;
-        });
+        {
+            let ctx = ctx.clone();
+            tokio::spawn(async move {
+                start_time_checking_loop(ctx).await;
+            });
+        }
+
+        #[cfg(debug_assertions)]
+        {
+            ctx.set_presence(Some(ActivityData::playing("debug mode")), OnlineStatus::Online);
+        } #[cfg(not(debug_assertions))]
+        {
+            let ctx = ctx.clone();
+            tokio::spawn(async move {
+                let mut i = 0usize;
+                loop {
+                    let desired = STATUSES[i];
+                    ctx.set_presence(Some(ActivityData::custom(desired)), OnlineStatus::Online);
+                    
+                    i = (i + 1) % STATUSES.len();
+                    tokio::time::sleep(STATUS_TIME).await;
+                }
+            });
+        }
+
+
+        println!("ready!");
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
