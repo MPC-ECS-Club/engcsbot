@@ -1,6 +1,53 @@
-use chrono::{Datelike, Local};
-use serenity::{all::{ChannelId, Message}, async_trait, prelude::*};
+mod commands;
 
+use std::time::Duration;
+use chrono::{DateTime, Datelike, Local, Timelike, Utc, Weekday};
+use serenity::{all::{ChannelId, Message}, async_trait, prelude::*};
+use serenity::all::{ButtonStyle, Color, Colour, Command, CreateButton, CreateEmbedFooter, CreateMessage, CreateSelectMenu, GuildId, Interaction, MessageBuilder, ReactionType, ReactionTypes, Ready};
+use serenity::builder::CreateEmbed;
+
+const ANNOUNCEMENT_OFFSET_MINS: u32 = 30;
+
+#[cfg(not(debug_assertions))]
+const MEETING_HOUR: u32 = 12;
+
+const MEETING_END: u32 = 14;
+
+#[cfg(debug_assertions)]
+const MEETING_HOUR: u32 = 17;
+
+
+#[cfg(debug_assertions)]
+const ANNOUNCEMENT_CHANNEL_ID: u64 = 839277529511755786;
+
+#[cfg(not(debug_assertions))]
+const ANNOUNCEMENT_CHANNEL_ID: u64 = 1153591616301432834;
+
+#[cfg(debug_assertions)]
+const UPDATE_RATE: Duration = Duration::from_secs(1);
+
+#[cfg(not(debug_assertions))]
+const UPDATE_RATE: Duration = Duration::from_mins(10);
+
+// why not
+fn get_clock_emoji_for_hour(hour: u32) -> &'static str {
+    match hour % 12 {
+        0 => "🕛️",
+        1 => "🕐️",
+        2 => "🕑️️",
+        3 => "🕒️",
+        4 => "🕓️",
+        5 => "🕔️",
+        6 => "🕕️",
+        7 => "🕖️",
+        8 => "🕗️",
+        9 => "🕘️",
+        10 => "🕙️",
+        11 => "🕚️",
+
+        _ => "⏰️"
+    }
+}
 
 async fn send_message(chan: &ChannelId, http: impl CacheHttp, msg: impl Into<String>) {
     if let Err(err) = chan.say(http, msg).await {
@@ -10,25 +57,112 @@ async fn send_message(chan: &ChannelId, http: impl CacheHttp, msg: impl Into<Str
 
 struct Handler;
 
+// TODO: cleanup
+async fn start_time_checking_loop(ctx: Context) {
+    let chan = ChannelId::new(ANNOUNCEMENT_CHANNEL_ID);
+    loop {
+        tokio::time::sleep(UPDATE_RATE).await;
+        let dt = Local::now();
+
+        // todo, perhaps add a config that can be configured from within discord? (using modals perhaps?)
+        let weekday = dt.weekday();
+        if ![Weekday::Fri, Weekday::Sat].contains(&weekday) { continue; }
+
+        let desired_location = if weekday == Weekday::Fri {
+            "BMC 204"
+        } else {
+            "STEM cel (1st floor library)"
+        };
+        if (dt.hour() == (MEETING_HOUR - 1)) {
+            if (dt.minute() >= ANNOUNCEMENT_OFFSET_MINS) {
+                let meet_time = get_meeting_time_for_today();
+                let seconds_since_epoch = meet_time.timestamp();
+
+                let meeting_end_epoch_time = get_end_meeting_time_for_today().timestamp();
+
+                let msg = CreateMessage::new()
+                    .embed(CreateEmbed::new()
+                        .title("🎉 Meeting Alert 🚨")
+                        .description(format!("@everyone We will have a meeting <t:{seconds_since_epoch}:R>"))
+                        .color(Color::DARK_GREEN)
+                        .field("Location 🪑", desired_location, true)
+                        .field(format!("Until {}", get_clock_emoji_for_hour(MEETING_END)), format!("<t:{meeting_end_epoch_time}:t>"), true)
+                        .footer(CreateEmbedFooter::new("Please react to this message if you plan on attending!\nNote this message was automated, and if a previous agreed upon arrangement for the meeting was made (such as date, time, location, or entirely canceled, please disregard this message.)"))
+                    );
+
+
+                if let Ok(msg) = chan.send_message(&ctx.http, msg).await {
+                    if let Err(why) = msg.react(&ctx.http, ReactionType::Unicode("\u{2705}".into())).await {
+                        eprintln!("failed to send message: {why:?}");
+                    }
+                }
+
+                println!("sleeping for 12 hours... gn!");
+                tokio::time::sleep(Duration::from_hours(12)).await;
+            }
+        }
+
+    }
+}
+
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
         if msg.content == "!ping" {
             send_message(&msg.channel_id, &ctx.http, "Pong!").await;
         } else if msg.content == "!day" {
-            let now = Local::now();
+            let now = Utc::now();
             let day = now.weekday();
-            let epoch = now.timestamp_millis();
-            
-            send_message(&msg.channel_id, &ctx.http, format!("Today is {day} <t:{epoch}>")).await;
+            let epoch = now.timestamp();
+
+            send_message(&msg.channel_id, &ctx.http, format!("Today is {day} <t:{epoch}:R>")).await;
         }
     }
+
+    async fn ready(&self, ctx: Context, data_about_bot: Ready) {
+        println!("connected to {}", data_about_bot.user.name);
+
+        Command::create_global_command(&ctx.http, commands::info::register()).await.expect("register command");
+
+        let ctx = ctx.clone();
+        tokio::spawn(async move {
+            start_time_checking_loop(ctx).await;
+        });
+    }
+
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        if let Interaction::Command(cmd) = interaction {
+            match cmd.data.name.as_str() {
+                "info" => commands::info::run(&ctx, cmd).await,
+
+                _ => eprintln!("called unimplemented cmd"),
+            };
+        }
+    }
+}
+
+fn get_meeting_time_for_today() -> DateTime<Local> {
+    let dt = Local::now();
+
+    dt
+        .with_hour(MEETING_HOUR).unwrap()
+        .with_minute(0).unwrap()
+        .with_second(0).unwrap()
+}
+
+fn get_end_meeting_time_for_today() -> DateTime<Local> {
+    let dt = Local::now();
+
+    dt
+        .with_hour(MEETING_END).unwrap()
+        .with_minute(0).unwrap()
+        .with_second(0).unwrap()
 }
 
 #[tokio::main]
 async fn main() {
     let token = std::env::var("DISCORD_TOKEN").expect("Missing discord bot token environment variable");
-    let intents = GatewayIntents::GUILD_MESSAGES;
+    let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
 
     let mut client = 
         Client::builder(&token, intents).event_handler(Handler)
