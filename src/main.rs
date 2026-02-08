@@ -1,7 +1,7 @@
 mod commands;
 
 use chrono::{DateTime, Datelike, Local, Timelike, Weekday};
-use serenity::all::{ActivityData, Color, Command, CreateEmbedFooter, CreateMessage, Interaction, OnlineStatus, ReactionType, Ready};
+use serenity::all::{ActivityData, Color, Command, CreateEmbedFooter, CreateMessage, GuildId, Interaction, OnlineStatus, ReactionType, Ready};
 use serenity::builder::CreateEmbed;
 use serenity::{all::{ChannelId, Message}, async_trait, prelude::*};
 use std::time::Duration;
@@ -104,18 +104,25 @@ async fn start_time_checking_loop(ctx: Context) {
 
 #[async_trait]
 impl EventHandler for Handler {
+    async fn cache_ready(&self, _ctx: Context, _guilds: Vec<GuildId>) {
+
+    }
+
     async fn message(&self, _ctx: Context, _msg: Message) {
-        
+
     }
 
     async fn ready(&self, ctx: Context, data_about_bot: Ready) {
         println!("connected to {}", data_about_bot.user.name);
 
-        
+        for cmd in Command::get_global_commands(&ctx.http).await.unwrap() {
+            Command::delete_global_command(&ctx.http, cmd.id).await.unwrap();
+        }
 
+        Command::create_global_command(&ctx.http, commands::announce::register()).await.expect("announce command");
+        Command::create_global_command(&ctx.http, commands::schedule::register()).await.expect("schedule command");
         Command::create_global_command(&ctx.http, commands::info::register()).await.expect("info command");
         Command::create_global_command(&ctx.http, commands::shutdown::register()).await.expect("shutdown command");
-        Command::create_global_command(&ctx.http, commands::announce::register()).await.expect("announce command");
 
         {
             let ctx = ctx.clone();
@@ -135,7 +142,7 @@ impl EventHandler for Handler {
                 loop {
                     let desired = STATUSES[i];
                     ctx.set_presence(Some(ActivityData::custom(desired)), OnlineStatus::Online);
-                    
+
                     i = (i + 1) % STATUSES.len();
                     tokio::time::sleep(STATUS_TIME).await;
                 }
@@ -152,6 +159,7 @@ impl EventHandler for Handler {
                 "info" => commands::info::run(&ctx, cmd).await,
                 "shutdown" => commands::shutdown::run(&ctx, cmd).await,
                 "announce" => commands::announce::run(&ctx, cmd).await,
+                "schedule" => commands::schedule::run(&ctx, cmd).await,
 
                 _ => println!("called unimplemented cmd"),
             };
@@ -180,7 +188,12 @@ fn get_end_meeting_time_for_today() -> DateTime<Local> {
 #[tokio::main]
 async fn main() {
     let token = std::env::var("DISCORD_TOKEN").expect("Missing discord bot token environment variable");
-    let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT | GatewayIntents::DIRECT_MESSAGES;
+    let intents =
+        GatewayIntents::GUILD_MESSAGES
+        | GatewayIntents::MESSAGE_CONTENT
+        | GatewayIntents::DIRECT_MESSAGES
+        | GatewayIntents::GUILDS
+        | GatewayIntents::GUILD_WEBHOOKS;
 
     let mut client = 
         Client::builder(&token, intents).event_handler(Handler)

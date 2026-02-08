@@ -1,4 +1,4 @@
-use serenity::all::{Color, CommandInteraction, CommandOptionType, Context, CreateCommand, CreateCommandOption, CreateEmbed, CreateEmbedAuthor, CreateEmbedFooter, CreateInteractionResponse, CreateInteractionResponseMessage, ResolvedOption, ResolvedValue};
+use serenity::all::{Color, CommandInteraction, CommandOptionType, Context, CreateCommand, CreateCommandOption, CreateEmbed, CreateEmbedAuthor, CreateEmbedFooter, CreateInteractionResponse, CreateInteractionResponseMessage, InteractionContext, Mentionable, ResolvedOption, ResolvedValue};
 
 use crate::commands::util;
 
@@ -20,12 +20,16 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
                 .title(*title)
                 .description(*description);
 
-            if let Some(ResolvedOption { value: ResolvedValue::String(foot), .. }) = options.get(2) {
+            if let Some(ResolvedOption { value: ResolvedValue::String(foot), .. }) = options.iter().filter(|a| a.name == "footer").nth(0) {
                 msg = msg.footer(CreateEmbedFooter::new(*foot));
             }
 
-    
-            if let Err(why) = cmd.create_response(&ctx.http, CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().add_embed(msg))).await {
+            let mut msg_content = "".to_string();
+            if let Some(ResolvedOption { value: ResolvedValue::Role(mention), .. }) = options.iter().filter(|a| a.name == "mention").nth(0) {
+                msg_content = format!("{}", mention.mention());
+            }
+
+            if let Err(why) = cmd.create_response(&ctx.http, CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().content(msg_content).add_embed(msg))).await {
                 println!("failed to create response: {why:?}");
             }
         }
@@ -35,6 +39,7 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
 pub fn register() -> CreateCommand {
     CreateCommand::new("announce")
         .description("Make a nicely formatted announcement.")
+        .add_context(InteractionContext::Guild)
         .add_option(
             CreateCommandOption::new(CommandOptionType::String, "title", "title for the announcement")
                 .required(true)
@@ -45,5 +50,8 @@ pub fn register() -> CreateCommand {
         )
         .add_option(
             CreateCommandOption::new(CommandOptionType::String, "footer", "footer for the announcement")
+        )
+        .add_option(
+            CreateCommandOption::new(CommandOptionType::Role, "mention", "who to mention for the announcement")
         )
 }
