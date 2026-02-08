@@ -1,10 +1,17 @@
 mod commands;
+mod data;
 
+use std::convert::Into;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use chrono::{DateTime, Datelike, Local, Timelike, Weekday};
-use serenity::all::{ActivityData, Color, Command, CreateEmbedFooter, CreateMessage, GuildId, Interaction, OnlineStatus, ReactionType, Ready};
+use serenity::all::{ActivityData, Color, Command, CreateEmbedFooter, CreateMessage, GuildId, Interaction, OnlineStatus, ReactionType, Ready, ShardManager};
 use serenity::builder::CreateEmbed;
 use serenity::{all::{ChannelId, Message}, async_trait, prelude::*};
 use std::time::Duration;
+use tokio::fs::File;
+use tokio::io::AsyncReadExt;
+use crate::data::scheduled_meeting::ScheduleManager;
 
 const ANNOUNCEMENT_OFFSET_MINS: u32 = 0;
 
@@ -13,7 +20,11 @@ const MEETING_HOUR: u32 = 12;
 
 const MEETING_END: u32 = 14;
 
+const MEETING_JSON_PATH: &str = "./meetings.json";
+
+#[cfg(not(debug_assertions))]
 const STATUSES: &[&str] = &["engineering...", "programming...", "procrastinating..."];
+#[cfg(not(debug_assertions))]
 const STATUS_TIME: Duration = Duration::from_mins(2);
 
 #[cfg(debug_assertions)]
@@ -115,6 +126,17 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, data_about_bot: Ready) {
         println!("connected to {}", data_about_bot.user.name);
 
+        {
+            let meeting_json = Path::new(MEETING_JSON_PATH);
+            if !meeting_json.exists() {
+                _ = File::create(meeting_json).await.expect("failed to create file");
+            }
+
+            let json = tokio::fs::read_to_string(&meeting_json).await.expect("failed to read file");
+
+            ScheduleManager::deserialize_from_json(json.as_str()).await;
+        }
+
         for cmd in Command::get_global_commands(&ctx.http).await.unwrap() {
             Command::delete_global_command(&ctx.http, cmd.id).await.unwrap();
         }
@@ -185,6 +207,12 @@ fn get_end_meeting_time_for_today() -> DateTime<Local> {
         .with_second(0).unwrap()
 }
 
+pub struct ClientShardManager;
+
+impl TypeMapKey for ClientShardManager {
+    type Value = Arc<ShardManager>;
+}
+
 #[tokio::main]
 async fn main() {
     let token = std::env::var("DISCORD_TOKEN").expect("Missing discord bot token environment variable");
@@ -200,7 +228,17 @@ async fn main() {
             .await
             .expect("Error creating client.");
 
+    client.data.write().await.insert::<ClientShardManager>(client.shard_manager.clone());
+
     if let Err(why) = client.start().await {
         println!("client error: {why:?}");
     }
+
+    // FIXME, not working
+    println!("Saving data (meetings={})", ScheduleManager::get_schedule().await.len());
+    let json = ScheduleManager::serialize_to_json().await.expect("failed to serialize data");
+    println!("json: {}", json);
+
+    tokio::fs::write(MEETING_JSON_PATH, json).await.expect("failed to create file");
+    println!("done!");
 }

@@ -1,6 +1,6 @@
 use serenity::all::{CommandInteraction, Context, CreateCommand, CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage, UserId};
 use std::process::exit;
-
+use crate::ClientShardManager;
 use crate::commands::util;
 
 // just in case the bot needs to be shutdown remotely
@@ -22,7 +22,11 @@ async fn shutdown(ctx: &Context, cmd: CommandInteraction) {
 
     println!("SHUTTING DOWN!");
 
-    ctx.shard.shutdown_clean();
+    // ctx.shard.shutdown_clean();
+    let data = ctx.data.read().await;
+    let shard_manager = data.get::<ClientShardManager>().unwrap();
+    shard_manager.shutdown_all().await;
+
     println!("Goodnight!");
 
     exit(1);

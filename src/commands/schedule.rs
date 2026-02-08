@@ -3,6 +3,9 @@ use chrono::Weekday;
 use crate::commands::util;
 use serenity::all::{CommandDataOptionValue, CommandInteraction, CommandOptionType, Context, CreateCommand, CreateCommandOption, InteractionContext};
 
+use crate::data::scheduled_meeting;
+use crate::data::scheduled_meeting::{ScheduleManager, ScheduledMeeting};
+
 pub async fn run(ctx: &Context, cmd: CommandInteraction) {
     if !util::is_user_admin(&cmd.member).await { return; }
 
@@ -29,7 +32,21 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
         return;
     };
 
-    _ = util::create_public_response(&cmd, &ctx.http, &format!("Scheduled a meeting for {day} at {start_hour:02}:{start_minute:02} until {end_hour:02}:{end_minute:02}")).await;
+    let sch = ScheduledMeeting {
+        day,
+        location: location.clone(),
+        start: (start_hour, start_minute),
+        end: (end_hour, end_minute),
+        onetime,
+    };
+
+    match ScheduleManager::add_meeting(sch).await {
+        Ok(_) => _ = util::create_public_response(&cmd, &ctx.http, &format!("Scheduled a meeting for {day} at {start_hour:02}:{start_minute:02} until {end_hour:02}:{end_minute:02}. Location: {location}. Only this week? {onetime}")).await,
+        Err(why) => {
+            _ = util::create_private_response(&cmd, &ctx.http, "Something went wrong while making this meeting. Check logs").await;
+            println!("failed to create meeting: {why:?}");
+        }
+    }
 
     // TODO store meeting schedule
 

@@ -24,7 +24,7 @@ pub fn parse_time(val: &str) -> Option<(u32, u32)> {
         let minute: u32 = res[1].trim_end_matches(&['a', 'p', 'm']).parse().ok()?;
 
 
-        if (hour < 1 || hour > 12 || minute > 60) { return None; }
+        if hour < 1 || hour > 12 || minute > 60 { return None; }
         let hour = if is_pm { if hour != 12 { hour + 12 } else { hour } } else { hour % 12 };
 
         Some((hour, minute))
