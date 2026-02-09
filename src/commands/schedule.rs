@@ -33,6 +33,11 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
         return;
     };
 
+    if (start_hour == end_hour && start_minute <= end_minute) || (start_hour < end_hour){
+        _ = util::create_private_response(&cmd, &ctx.http, "End time must be later than the start time.").await;
+        return;
+    }
+
     let sch = ScheduledMeeting {
         day,
         location: location.clone(),

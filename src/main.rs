@@ -3,22 +3,18 @@ mod data;
 
 use crate::data::saveutil;
 use crate::data::scheduled_meeting::ScheduleManager;
-use chrono::{DateTime, Datelike, Local, Timelike, Weekday};
+use chrono::{DateTime, Datelike, Local, Timelike};
 use serenity::all::{ActivityData, Color, Command, CreateEmbedFooter, CreateMessage, GuildId, Interaction, OnlineStatus, ReactionType, Ready, ShardManager};
 use serenity::builder::CreateEmbed;
 use serenity::{all::{ChannelId, Message}, async_trait, prelude::*};
 use std::convert::Into;
+use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::File;
 
-const ANNOUNCEMENT_OFFSET_MINS: u32 = 0;
-
-#[cfg(not(debug_assertions))]
-const MEETING_HOUR: u32 = 12;
-
-const MEETING_END: u32 = 14;
+const ANNOUNCEMENT_EPSILON_MINS: u32 = 0;
 
 const MEETING_JSON_PATH: &str = "./meetings.json";
 
@@ -28,9 +24,6 @@ const LOG_CHANNEL_ID: ChannelId = ChannelId::new(1470495355329183744);
 const STATUSES: &[&str] = &["engineering...", "programming...", "procrastinating..."];
 #[cfg(not(debug_assertions))]
 const STATUS_TIME: Duration = Duration::from_mins(2);
-
-#[cfg(debug_assertions)]
-const MEETING_HOUR: u32 = 14;
 
 #[cfg(debug_assertions)]
 const ANNOUNCEMENT_CHANNEL_ID: u64 = 839277529511755786;
@@ -87,23 +80,32 @@ async fn start_time_checking_loop(ctx: Context) {
     let chan = ChannelId::new(ANNOUNCEMENT_CHANNEL_ID);
     loop {
         tokio::time::sleep(UPDATE_RATE).await;
+
         let dt = Local::now();
-
-        // todo, perhaps add a config that can be configured from within discord? (using modals perhaps?)
         let weekday = dt.weekday();
-        if ![Weekday::Fri, Weekday::Sat].contains(&weekday) { continue; }
 
-        let desired_location = if weekday == Weekday::Fri {
-            "BMC 204"
-        } else {
-            "STEM Center (1st floor library)"
-        };
-        if dt.hour() == (MEETING_HOUR - 1) { // FIXME!!! potential underflow!!!
-            if dt.minute() >= ANNOUNCEMENT_OFFSET_MINS {
-                let meet_time = get_meeting_time_for_today();
+        let meetings = ScheduleManager::get_schedule().await;
+        for meeting in meetings.deref() {
+            if meeting.day != weekday { continue; }
+            if ScheduleManager::is_already_announced(meeting).await { continue; }
+
+            let (start_hr, start_min) = meeting.start;
+
+            // this prevents the underflow, although it would mean that we would be checking an hour before,
+            // since we skip any meetings not on the current day
+            // I highly doubt we'll have midnight meetings, so I won't fix this,
+            // but I'll leave this message here so it is documented.
+            let desired_hr_to_check = if start_hr == 0 { start_hr } else { start_hr - 1 };
+
+            if dt.hour() == desired_hr_to_check && dt.minute() >= (ANNOUNCEMENT_EPSILON_MINS + start_min) {
+                // meeting!
+
+                let meet_time = set_today_to_hr_min_sec(start_hr, start_min, 0);
                 let seconds_since_epoch = meet_time.timestamp();
 
-                let meeting_end_epoch_time = get_end_meeting_time_for_today().timestamp();
+                let (end_hr, end_min) = meeting.end;
+
+                let meeting_end_epoch_time = set_today_to_hr_min_sec(end_hr, end_min, 0).timestamp();
 
                 let msg = CreateMessage::new()
                     .content("@everyone")
@@ -111,23 +113,45 @@ async fn start_time_checking_loop(ctx: Context) {
                         .title("🎉 Meeting Alert 🚨")
                         .description(format!("There will be a meeting today <t:{seconds_since_epoch}:R>"))
                         .color(Color::DARK_GREEN)
-                        .field("Location 🪐", desired_location, true)
-                        .field(format!("Until {}", get_clock_emoji_for_hour(MEETING_END)), format!("<t:{meeting_end_epoch_time}:t>"), true)
+                        .field("Location 🪐", &meeting.location, true)
+                        .field(format!("Until {}", get_clock_emoji_for_hour(end_hr)), format!("<t:{meeting_end_epoch_time}:t>"), true)
                         .footer(CreateEmbedFooter::new("Please react to this message if you plan on attending!\nNote this message was automated, and if a previous agreed upon arrangement for the meeting was made (such as date, time, location, or entirely canceled, please disregard this message.)"))
                     );
 
 
                 if let Ok(msg) = chan.send_message(&ctx.http, msg).await &&
                     let Err(why) = msg.react(&ctx.http, ReactionType::Unicode("\u{2705}".into())).await {
-                        println!("failed to send message: {why:?}");
+
+                    discord_log!(&ctx.http, "failed to send automatic announcement, or reaction to it. {why:?}");
                 }
 
+                if meeting.onetime {
+                    ScheduleManager::remove_meeting(meeting).await;
+                } else {
+                    // maybe avoid this clone, doesn't really matter it's not *that* expensive, and it doesn't occur that often.
+                    ScheduleManager::set_already_announced(meeting.clone(), meeting_end_epoch_time).await;
+                }
 
-                println!("sleeping for 12 hours... gn!"); // lmao, probably not the best way to be doing this
-                tokio::time::sleep(Duration::from_hours(12)).await;
             }
         }
+    }
+}
 
+async fn reset_announced_state() {
+    tokio::time::sleep(UPDATE_RATE.div_f64(2.0)).await; // offset from  regular update rate
+
+    loop {
+        tokio::time::sleep(UPDATE_RATE).await;
+
+        for meeting in ScheduleManager::get_schedule().await.deref() {
+            // I lock onto the same map two times here, perhaps i should just get it first, but im sure its fine.
+            let time = ScheduleManager::get_announced_reset_timestamp(meeting).await;
+            let now = Local::now().timestamp();
+
+            if time != -1 && now > time {
+                ScheduleManager::reset_announced_state(meeting).await;
+            }
+        }
     }
 }
 
@@ -172,6 +196,10 @@ impl EventHandler for Handler {
             });
         }
 
+        tokio::spawn(async {
+            reset_announced_state().await;
+        });
+
         #[cfg(debug_assertions)]
         {
             ctx.set_presence(Some(ActivityData::playing("debug mode")), OnlineStatus::Online);
@@ -208,24 +236,12 @@ impl EventHandler for Handler {
     }
 }
 
-fn get_meeting_time_for_today() -> DateTime<Local> {
-    let dt = Local::now();
-
-    dt
-        .with_hour(MEETING_HOUR).unwrap()
-        .with_minute(0).unwrap()
-        .with_second(0).unwrap()
+fn set_today_to_hr_min_sec(hr: u32, min: u32, sec: u32) -> DateTime<Local> {
+    Local::now()
+        .with_hour(hr).unwrap()
+        .with_minute(min).unwrap()
+        .with_second(sec).unwrap()
 }
-
-fn get_end_meeting_time_for_today() -> DateTime<Local> {
-    let dt = Local::now();
-
-    dt
-        .with_hour(MEETING_END).unwrap()
-        .with_minute(0).unwrap()
-        .with_second(0).unwrap()
-}
-
 pub struct ClientShardManager;
 
 impl TypeMapKey for ClientShardManager {
