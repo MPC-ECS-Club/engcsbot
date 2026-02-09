@@ -3,7 +3,7 @@ mod data;
 
 use crate::data::saveutil;
 use crate::data::scheduled_meeting::ScheduleManager;
-use chrono::{DateTime, Datelike, Local, Timelike};
+use chrono::{DateTime, Datelike, Local, Timelike, Weekday};
 use serenity::all::{ActivityData, Color, Command, CreateEmbedFooter, CreateMessage, GuildId, Interaction, OnlineStatus, ReactionType, Ready, ShardManager};
 use serenity::builder::CreateEmbed;
 use serenity::{all::{ChannelId, Message}, async_trait, prelude::*};
@@ -188,6 +188,7 @@ impl EventHandler for Handler {
         Command::create_global_command(&ctx.http, commands::schedule::register()).await.expect("schedule command");
         Command::create_global_command(&ctx.http, commands::info::register()).await.expect("info command");
         Command::create_global_command(&ctx.http, commands::shutdown::register()).await.expect("shutdown command");
+        Command::create_global_command(&ctx.http, commands::upcoming::register()).await.expect("upcoming command");
 
         {
             let ctx = ctx.clone();
@@ -229,6 +230,7 @@ impl EventHandler for Handler {
                 "shutdown" => commands::shutdown::run(&ctx, cmd).await,
                 "announce" => commands::announce::run(&ctx, cmd).await,
                 "schedule" => commands::schedule::run(&ctx, cmd).await,
+                "upcoming" => commands::upcoming::run(&ctx, cmd).await,
 
                 _ => println!("called unimplemented cmd"),
             };
@@ -236,12 +238,18 @@ impl EventHandler for Handler {
     }
 }
 
-fn set_today_to_hr_min_sec(hr: u32, min: u32, sec: u32) -> DateTime<Local> {
+pub fn set_today_to_hr_min_sec(hr: u32, min: u32, sec: u32) -> DateTime<Local> {
     Local::now()
         .with_hour(hr).unwrap()
         .with_minute(min).unwrap()
         .with_second(sec).unwrap()
 }
+
+pub fn to_12_hr_clock_str(clock: (u32, u32)) -> String {
+    let hr = (clock.0 % 12) + 1;
+    format!("{:02}:{:02}", hr, clock.1)
+}
+
 pub struct ClientShardManager;
 
 impl TypeMapKey for ClientShardManager {
