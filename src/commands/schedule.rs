@@ -1,21 +1,22 @@
-use std::str::FromStr;
-use chrono::Weekday;
 use crate::commands::util;
+use chrono::Weekday;
 use serenity::all::{CommandDataOptionValue, CommandInteraction, CommandOptionType, Context, CreateCommand, CreateCommandOption, InteractionContext};
+use std::str::FromStr;
 
-use crate::data::{saveutil, scheduled_meeting};
 use crate::data::scheduled_meeting::{ScheduleManager, ScheduledMeeting};
+use crate::data::saveutil;
+use crate::discord_log;
 
 pub async fn run(ctx: &Context, cmd: CommandInteraction) {
     if !util::is_user_admin(&cmd.member).await { return; }
 
     let options = &cmd.data.options;
 
-    let CommandDataOptionValue::String(day) = &options.get(0).expect("day").value else { return; };
+    let CommandDataOptionValue::String(day) = &options.first().expect("day").value else { return; };
     let CommandDataOptionValue::String(location) = &options.get(1).expect("location").value else { return; };
     let CommandDataOptionValue::String(start) = &options.get(2).expect("start").value else { return; };
     let CommandDataOptionValue::String(end) = &options.get(3).expect("end").value else { return; };
-    let onetime = *&options.iter().filter(|o| o.name == "onetime").nth(0).map_or(false, |opt| opt.value.as_bool().unwrap_or(false));
+    let onetime = options.iter().find(|o| o.name == "onetime").is_some_and(|opt| opt.value.as_bool().unwrap_or(false));
 
     let Some((start_hour, start_minute)) = util::parse_time(start) else {
         _ = util::create_private_response(&cmd, &ctx.http, "Please enter a valid start time!").await;
@@ -41,13 +42,13 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
     };
 
     match ScheduleManager::add_meeting(sch).await {
-        Ok(_) => _ = {
+        Ok(_) => {
             _ = util::create_public_response(&cmd, &ctx.http, &format!("Scheduled a meeting for {day} at {start_hour:02}:{start_minute:02} until {end_hour:02}:{end_minute:02}. Location: {location}. Only this week? {onetime}")).await;
             saveutil::save_all().await;
         },
         Err(why) => {
             _ = util::create_private_response(&cmd, &ctx.http, "Something went wrong while making this meeting. Check logs").await;
-            println!("failed to create meeting: {why:?}");
+            discord_log!(&ctx.http, "failed to create meeting: {why:?}");
         }
     }
 

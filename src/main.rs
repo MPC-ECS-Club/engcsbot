@@ -1,18 +1,17 @@
 mod commands;
 mod data;
 
-use std::convert::Into;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use crate::data::saveutil;
+use crate::data::scheduled_meeting::ScheduleManager;
 use chrono::{DateTime, Datelike, Local, Timelike, Weekday};
 use serenity::all::{ActivityData, Color, Command, CreateEmbedFooter, CreateMessage, GuildId, Interaction, OnlineStatus, ReactionType, Ready, ShardManager};
 use serenity::builder::CreateEmbed;
 use serenity::{all::{ChannelId, Message}, async_trait, prelude::*};
+use std::convert::Into;
+use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::File;
-use tokio::io::AsyncReadExt;
-use crate::data::saveutil;
-use crate::data::scheduled_meeting::ScheduleManager;
 
 const ANNOUNCEMENT_OFFSET_MINS: u32 = 0;
 
@@ -22,6 +21,8 @@ const MEETING_HOUR: u32 = 12;
 const MEETING_END: u32 = 14;
 
 const MEETING_JSON_PATH: &str = "./meetings.json";
+
+const LOG_CHANNEL_ID: ChannelId = ChannelId::new(1470495355329183744);
 
 #[cfg(not(debug_assertions))]
 const STATUSES: &[&str] = &["engineering...", "programming...", "procrastinating..."];
@@ -42,6 +43,22 @@ const UPDATE_RATE: Duration = Duration::from_secs(1);
 
 #[cfg(not(debug_assertions))]
 const UPDATE_RATE: Duration = Duration::from_mins(1);
+
+pub async fn discord_log(http: impl CacheHttp, val: impl Into<String>) {
+    let val = val.into();
+    println!("{}", &val);
+
+    if let Err(why) = LOG_CHANNEL_ID.send_message(&http, CreateMessage::new().content(val)).await {
+        println!("failed to log to discord channel: {why:?}");
+    }
+}
+
+#[macro_export]
+macro_rules! discord_log {
+    ( $http:expr, $($arg:expr),* ) => {
+        discord_log($http, format!($($arg),*)).await;
+    };
+}
 
 // why not
 fn get_clock_emoji_for_hour(hour: u32) -> &'static str {
@@ -100,11 +117,11 @@ async fn start_time_checking_loop(ctx: Context) {
                     );
 
 
-                if let Ok(msg) = chan.send_message(&ctx.http, msg).await {
-                    if let Err(why) = msg.react(&ctx.http, ReactionType::Unicode("\u{2705}".into())).await {
+                if let Ok(msg) = chan.send_message(&ctx.http, msg).await &&
+                    let Err(why) = msg.react(&ctx.http, ReactionType::Unicode("\u{2705}".into())).await {
                         println!("failed to send message: {why:?}");
-                    }
                 }
+
 
                 println!("sleeping for 12 hours... gn!"); // lmao, probably not the best way to be doing this
                 tokio::time::sleep(Duration::from_hours(12)).await;
@@ -174,7 +191,7 @@ impl EventHandler for Handler {
         }
 
 
-        println!("ready!");
+        discord_log!(&ctx.http, "Ready!");
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
@@ -233,8 +250,10 @@ async fn main() {
     client.data.write().await.insert::<ClientShardManager>(client.shard_manager.clone());
 
     tokio::select! {
-        Err(why) = client.start() => {
-            println!("client error: {why:?}");
+        res = client.start() => { // select chooses the first *matching* branch
+            if let Err(why) = res {
+                println!("client error: {why:?}");
+            }
         }
         _ = tokio::signal::ctrl_c() => {
             println!("received Ctrl-C, shutting down ...");
