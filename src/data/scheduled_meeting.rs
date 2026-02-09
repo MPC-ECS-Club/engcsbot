@@ -27,6 +27,10 @@ impl ScheduleManager {
         SCHEDULED.lock().await
     }
 
+    pub async fn meeting_count() -> usize {
+        Self::get_schedule().await.len()
+    }
+
     pub async fn add_meeting(meeting: ScheduledMeeting) -> Result<(), SchedulingError> {
         let mut schedule = Self::get_schedule().await;
         if schedule.contains(&meeting) {
@@ -40,7 +44,7 @@ impl ScheduleManager {
 
     pub async fn serialize_to_json() -> Result<String, serde_json::Error>{
         let schedule = Self::get_schedule().await;
-        serde_json::to_string(schedule.deref())
+        serde_json::to_string_pretty(schedule.deref())
     }
 
     pub async fn deserialize_from_json(json: &str) {

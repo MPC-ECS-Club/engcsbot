@@ -11,6 +11,7 @@ use serenity::{all::{ChannelId, Message}, async_trait, prelude::*};
 use std::time::Duration;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
+use crate::data::saveutil;
 use crate::data::scheduled_meeting::ScheduleManager;
 
 const ANNOUNCEMENT_OFFSET_MINS: u32 = 0;
@@ -135,6 +136,7 @@ impl EventHandler for Handler {
             let json = tokio::fs::read_to_string(&meeting_json).await.expect("failed to read file");
 
             ScheduleManager::deserialize_from_json(json.as_str()).await;
+            println!("loaded {} meetings.", ScheduleManager::meeting_count().await);
         }
 
         for cmd in Command::get_global_commands(&ctx.http).await.unwrap() {
@@ -230,15 +232,16 @@ async fn main() {
 
     client.data.write().await.insert::<ClientShardManager>(client.shard_manager.clone());
 
-    if let Err(why) = client.start().await {
-        println!("client error: {why:?}");
+    tokio::select! {
+        Err(why) = client.start() => {
+            println!("client error: {why:?}");
+        }
+        _ = tokio::signal::ctrl_c() => {
+            println!("received Ctrl-C, shutting down ...");
+        }
     }
 
-    // FIXME, not working
     println!("Saving data (meetings={})", ScheduleManager::get_schedule().await.len());
-    let json = ScheduleManager::serialize_to_json().await.expect("failed to serialize data");
-    println!("json: {}", json);
-
-    tokio::fs::write(MEETING_JSON_PATH, json).await.expect("failed to create file");
+    saveutil::save_all().await;
     println!("done!");
 }

@@ -3,7 +3,7 @@ use chrono::Weekday;
 use crate::commands::util;
 use serenity::all::{CommandDataOptionValue, CommandInteraction, CommandOptionType, Context, CreateCommand, CreateCommandOption, InteractionContext};
 
-use crate::data::scheduled_meeting;
+use crate::data::{saveutil, scheduled_meeting};
 use crate::data::scheduled_meeting::{ScheduleManager, ScheduledMeeting};
 
 pub async fn run(ctx: &Context, cmd: CommandInteraction) {
@@ -41,14 +41,15 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
     };
 
     match ScheduleManager::add_meeting(sch).await {
-        Ok(_) => _ = util::create_public_response(&cmd, &ctx.http, &format!("Scheduled a meeting for {day} at {start_hour:02}:{start_minute:02} until {end_hour:02}:{end_minute:02}. Location: {location}. Only this week? {onetime}")).await,
+        Ok(_) => _ = {
+            _ = util::create_public_response(&cmd, &ctx.http, &format!("Scheduled a meeting for {day} at {start_hour:02}:{start_minute:02} until {end_hour:02}:{end_minute:02}. Location: {location}. Only this week? {onetime}")).await;
+            saveutil::save_all().await;
+        },
         Err(why) => {
             _ = util::create_private_response(&cmd, &ctx.http, "Something went wrong while making this meeting. Check logs").await;
             println!("failed to create meeting: {why:?}");
         }
     }
-
-    // TODO store meeting schedule
 
     // current way to do modals is kinda depercated, waiting until next version of serenity to use them
     // let f = async move || {

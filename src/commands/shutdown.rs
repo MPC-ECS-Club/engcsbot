@@ -28,8 +28,6 @@ async fn shutdown(ctx: &Context, cmd: CommandInteraction) {
     shard_manager.shutdown_all().await;
 
     println!("Goodnight!");
-
-    exit(1);
 }
 
 pub async fn run(ctx: &Context, cmd: CommandInteraction) {
