@@ -1,25 +1,42 @@
 use crate::commands::util;
 use chrono::Weekday;
-use serenity::all::{CommandDataOptionValue, CommandInteraction, CommandOptionType, Context, CreateCommand, CreateCommandOption, InteractionContext};
+use serenity::all::{
+    CommandDataOptionValue, CommandInteraction, CommandOptionType, Context, CreateCommand,
+    CreateCommandOption, InteractionContext,
+};
 use std::str::FromStr;
 
-use crate::data::scheduled_meeting::{ScheduleManager, ScheduledMeeting};
 use crate::data::saveutil;
+use crate::data::scheduled_meeting::{ScheduleManager, ScheduledMeeting};
 use crate::discord_log;
 
 pub async fn run(ctx: &Context, cmd: CommandInteraction) {
-    if !util::is_user_admin(&cmd.member).await { return; }
+    if !util::is_user_admin(&cmd.member).await {
+        return;
+    }
 
     let options = &cmd.data.options;
 
-    let CommandDataOptionValue::String(day) = &options.first().expect("day").value else { return; };
-    let CommandDataOptionValue::String(location) = &options.get(1).expect("location").value else { return; };
-    let CommandDataOptionValue::String(start) = &options.get(2).expect("start").value else { return; };
-    let CommandDataOptionValue::String(end) = &options.get(3).expect("end").value else { return; };
-    let onetime = options.iter().find(|o| o.name == "onetime").is_some_and(|opt| opt.value.as_bool().unwrap_or(false));
+    let CommandDataOptionValue::String(day) = &options.first().expect("day").value else {
+        return;
+    };
+    let CommandDataOptionValue::String(location) = &options.get(1).expect("location").value else {
+        return;
+    };
+    let CommandDataOptionValue::String(start) = &options.get(2).expect("start").value else {
+        return;
+    };
+    let CommandDataOptionValue::String(end) = &options.get(3).expect("end").value else {
+        return;
+    };
+    let onetime = options
+        .iter()
+        .find(|o| o.name == "onetime")
+        .is_some_and(|opt| opt.value.as_bool().unwrap_or(false));
 
     let Some((start_hour, start_minute)) = util::parse_time(start) else {
-        _ = util::create_private_response(&cmd, &ctx.http, "Please enter a valid start time!").await;
+        _ = util::create_private_response(&cmd, &ctx.http, "Please enter a valid start time!")
+            .await;
         return;
     };
 
@@ -33,8 +50,13 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
         return;
     };
 
-    if (start_hour == end_hour && start_minute <= end_minute) || (start_hour < end_hour){
-        _ = util::create_private_response(&cmd, &ctx.http, "End time must be later than the start time.").await;
+    if (start_hour == end_hour && start_minute >= end_minute) || (start_hour > end_hour) {
+        _ = util::create_private_response(
+            &cmd,
+            &ctx.http,
+            "End time must be later than the start time.",
+        )
+        .await;
         return;
     }
 
@@ -46,13 +68,25 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
         onetime,
     };
 
+    // if ScheduleManager::has_meeting(&sch).await {
+    //     _ = util::create_private_response(&cmd, &ctx.http, "A meeting with the same specifications already exists!").await;
+    //     return;
+    // }
+
     match ScheduleManager::add_meeting(sch).await {
         Ok(_) => {
             _ = util::create_public_response(&cmd, &ctx.http, &format!("Scheduled a meeting for {day} at {start_hour:02}:{start_minute:02} until {end_hour:02}:{end_minute:02}. Location: {location}. Only this week? {onetime}")).await;
-            saveutil::save_all().await;
-        },
+            if !onetime {
+                saveutil::save_all().await;
+            }
+        }
         Err(why) => {
-            _ = util::create_private_response(&cmd, &ctx.http, "Something went wrong while making this meeting. Check logs").await;
+            _ = util::create_private_response(
+                &cmd,
+                &ctx.http,
+                "Something went wrong while making this meeting. Check logs",
+            )
+            .await;
             discord_log!(&ctx.http, "failed to create meeting: {why:?}");
         }
     }
@@ -107,9 +141,41 @@ pub fn register() -> CreateCommand {
     CreateCommand::new("schedule")
         .description("Schedule a new meeting")
         .add_context(InteractionContext::Guild)
-        .add_option(CreateCommandOption::new(CommandOptionType::String, "day", "Day of the week (monday, tuesday, ...)").required(true))
-        .add_option(CreateCommandOption::new(CommandOptionType::String, "location", "Where the meeting takes place (BMC 204, STEM Center, ...)").required(true))
-        .add_option(CreateCommandOption::new(CommandOptionType::String, "start", "Time of day (12:00pm, 1:30pm, 2:00pm)").required(true))
-        .add_option(CreateCommandOption::new(CommandOptionType::String, "end", "Time of day (12:00pm, 1:30pm, 2:00pm)").required(true))
-        .add_option(CreateCommandOption::new(CommandOptionType::Boolean, "onetime", "If this is true, this meeting will only be scheduled for this week."))
+        .add_option(
+            CreateCommandOption::new(
+                CommandOptionType::String,
+                "day",
+                "Day of the week (monday, tuesday, ...)",
+            )
+            .required(true),
+        )
+        .add_option(
+            CreateCommandOption::new(
+                CommandOptionType::String,
+                "location",
+                "Where the meeting takes place (BMC 204, STEM Center, ...)",
+            )
+            .required(true),
+        )
+        .add_option(
+            CreateCommandOption::new(
+                CommandOptionType::String,
+                "start",
+                "Time of day (12:00pm, 1:30pm, 2:00pm)",
+            )
+            .required(true),
+        )
+        .add_option(
+            CreateCommandOption::new(
+                CommandOptionType::String,
+                "end",
+                "Time of day (12:00pm, 1:30pm, 2:00pm)",
+            )
+            .required(true),
+        )
+        .add_option(CreateCommandOption::new(
+            CommandOptionType::Boolean,
+            "onetime",
+            "If this is true, this meeting will only be scheduled for this week.",
+        ))
 }

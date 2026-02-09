@@ -1,16 +1,30 @@
-use std::hash::Hash;
-use chrono::Weekday;
-use chrono::Weekday::{Fri, Mon, Sat, Sun, Thu, Tue, Wed};
-use serenity::all::{CommandInteraction, Context, CreateCommand, CreateEmbed, CreateInteractionResponse, CreateInteractionResponseMessage};
 use crate::data::scheduled_meeting::{ScheduleManager, ScheduledMeeting};
 use crate::{get_clock_emoji_for_hour, to_12_hr_clock_str};
+use chrono::Weekday;
+use chrono::Weekday::{Fri, Mon, Sat, Sun, Thu, Tue, Wed};
+use serenity::all::{
+    CommandInteraction, Context, CreateCommand, CreateEmbed, CreateInteractionResponse,
+    CreateInteractionResponseMessage,
+};
 
-fn get_meetings_for_day(day: Weekday, meetings: &Vec<ScheduledMeeting>) -> String {
-    meetings.iter()
+fn meeting_to_string(m: &ScheduledMeeting) -> String {
+    let extra = if m.onetime { " (just this week)" } else { "" };
+
+    format!(
+        "{} {}: to {} {}{}",
+        get_clock_emoji_for_hour(m.start.0),
+        to_12_hr_clock_str(m.start),
+        get_clock_emoji_for_hour(m.end.0),
+        to_12_hr_clock_str(m.end),
+        extra
+    )
+}
+
+fn get_meetings_for_day(day: Weekday, meetings: &[ScheduledMeeting]) -> String {
+    meetings
+        .iter()
         .filter(|m| m.day == day)
-        .map(|m| format!("{} {}: to {} {}",
-                         get_clock_emoji_for_hour(m.start.0), to_12_hr_clock_str(m.start),
-                         get_clock_emoji_for_hour(m.end.0), to_12_hr_clock_str(m.end)))
+        .map(meeting_to_string)
         .collect::<Vec<String>>()
         .join("\n")
 }
@@ -27,8 +41,10 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
     let saturdays = get_meetings_for_day(Sat, &schedule);
     let sundays = get_meetings_for_day(Sun, &schedule);
 
+    drop(schedule);
+
     let embed = CreateEmbed::new()
-        .title("Upcoming meetings.")
+        .title("Upcoming Meetings")
         .field("Monday", mondays, false)
         .field("Tuesdays", tuesdays, false)
         .field("Wednesdays", wednesdays, false)
@@ -37,8 +53,7 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
         .field("Saturdays", saturdays, false)
         .field("Sundays", sundays, false);
 
-    let msg = CreateInteractionResponseMessage::new()
-        .embed(embed);
+    let msg = CreateInteractionResponseMessage::new().embed(embed);
 
     let builder = CreateInteractionResponse::Message(msg);
 
@@ -46,6 +61,5 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
 }
 
 pub fn register() -> CreateCommand {
-    CreateCommand::new("upcoming")
-        .description("See all upcoming meetings.")
+    CreateCommand::new("upcoming").description("See all upcoming meetings.")
 }

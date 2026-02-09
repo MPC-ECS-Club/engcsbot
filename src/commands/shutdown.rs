@@ -1,6 +1,9 @@
 use crate::commands::util;
-use crate::{discord_log, ClientShardManager};
-use serenity::all::{CommandInteraction, Context, CreateCommand, CreateInteractionResponse, CreateInteractionResponseMessage, UserId};
+use crate::{ClientShardManager, discord_log};
+use serenity::all::{
+    CommandInteraction, Context, CreateCommand, CreateInteractionResponse,
+    CreateInteractionResponseMessage, UserId,
+};
 
 // just in case the bot needs to be shutdown remotely
 
@@ -15,7 +18,12 @@ async fn shutdown(ctx: &Context, cmd: CommandInteraction) {
 
     _ = cmd.create_response(&ctx.http, builder).await;
 
-    discord_log!(&ctx.http, "A user ({}, id={}) requested the bot to be shutdown.", cmd.user.name, cmd.user.id);
+    discord_log!(
+        &ctx.http,
+        "A user ({}, id={}) requested the bot to be shutdown.",
+        cmd.user.name,
+        cmd.user.id
+    );
 
     println!("SHUTTING DOWN!");
 
@@ -33,6 +41,5 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
 }
 
 pub fn register() -> CreateCommand {
-    CreateCommand::new("shutdown")
-        .description("Shutdown the bot if something goes wrong.")
+    CreateCommand::new("shutdown").description("Shutdown the bot if something goes wrong.")
 }
