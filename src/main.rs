@@ -5,8 +5,8 @@ use crate::data::saveutil;
 use crate::data::scheduled_meeting::ScheduleManager;
 use chrono::{DateTime, Datelike, Local, Timelike};
 use serenity::all::{
-    ActivityData, Color, Command, CreateEmbedFooter, CreateMessage, GuildId, Interaction,
-    OnlineStatus, ReactionType, Ready, ShardManager,
+    ActivityData, Color, Command, CommandId, CreateEmbedFooter, CreateMessage, GuildId,
+    Interaction, OnlineStatus, ReactionType, Ready, ShardManager,
 };
 use serenity::builder::CreateEmbed;
 use serenity::{
@@ -201,17 +201,29 @@ async fn bot_shell(ctx: Context) {
         println!(">> {buf}");
 
         match buf {
-            "delete-commands" => { // for debugging
+            "delete-commands" => {
+                // for debugging
                 println!("deleting commands");
                 let cmds = Command::get_global_commands(&ctx.http).await;
-                let Ok(cmds) = cmds else { continue; };
+                let Ok(cmds) = cmds else {
+                    continue;
+                };
 
                 for cmd in cmds {
-                    _ = Command::delete_global_command(&ctx.http, cmd.id)
-                        .await;
+                    _ = Command::delete_global_command(&ctx.http, cmd.id).await;
                 }
                 println!("done.");
-            },
+            }
+            "delete-cmd-id" => {
+                println!("enter desired id:");
+                let mut buf = String::new();
+                reader.read_line(&mut buf).await.unwrap();
+                buf = buf.trim().to_string();
+                let id: u64 = buf.parse().unwrap();
+                println!("deleting...");
+                _ = Command::delete_global_command(&ctx.http, CommandId::new(id)).await;
+                println!("done.");
+            }
             _ => (),
         };
     }
@@ -248,8 +260,6 @@ impl EventHandler for Handler {
                 ScheduleManager::meeting_count().await
             );
         }
-
-
 
         Command::create_global_command(&ctx.http, commands::announce::register())
             .await

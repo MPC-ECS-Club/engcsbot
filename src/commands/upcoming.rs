@@ -9,7 +9,7 @@ use serenity::all::{
 
 async fn meeting_to_string(m: &ScheduledMeeting) -> String {
     let extra = if m.onetime { " (just this week)" } else { "" };
-    let canceled_extra = if ScheduleManager::is_meeting_cancelled(&m).await {
+    let canceled_extra = if ScheduleManager::is_meeting_cancelled(m).await {
         "❌️ CANCELLED "
     } else {
         "✅️ "
