@@ -1,8 +1,9 @@
 mod commands;
 mod data;
 
+use std::collections::HashMap;
 use crate::data::saveutil;
-use crate::data::scheduled_meeting::ScheduleManager;
+use crate::data::scheduled_meeting::{ScheduleManager, ScheduledMeeting, Suspended};
 use chrono::{DateTime, Datelike, Local, Timelike};
 use serenity::all::{
     ActivityData, Color, Command, CommandId, CreateEmbedFooter, CreateMessage, GuildId,
@@ -26,6 +27,7 @@ use tokio::io::AsyncBufReadExt;
 const ANNOUNCEMENT_EPSILON_MINS: u32 = 0;
 
 const MEETING_JSON_PATH: &str = "./meetings.json";
+const SUSPENDED_JSON_PATH: &str = "./suspended.json";
 
 const LOG_CHANNEL_ID: ChannelId = ChannelId::new(1470495355329183744);
 
@@ -171,6 +173,20 @@ async fn start_time_checking_loop(ctx: Context) {
     }
 }
 
+fn is_suspension_done(meeting: &ScheduledMeeting, reset_timestamp: i64) -> bool{
+    let now = Local::now().timestamp();
+
+    reset_timestamp != -1 && now > reset_timestamp
+}
+
+async fn reset_suspended_if_necessary(meeting: &ScheduledMeeting) {
+    let time = ScheduleManager::get_announced_reset_timestamp(meeting).await;
+
+    if is_suspension_done(meeting, time) { // maybe don't lock again, and just store the map?
+        ScheduleManager::reset_announced_state(meeting).await;
+    }
+}
+
 async fn reset_announced_state() {
     tokio::time::sleep(UPDATE_RATE.div_f64(2.0)).await; // offset from  regular update rate
 
@@ -178,13 +194,7 @@ async fn reset_announced_state() {
         tokio::time::sleep(UPDATE_RATE).await;
 
         for meeting in ScheduleManager::get_schedule().await.deref() {
-            // I lock onto the same map two times here, perhaps I should just get it first, but im sure it's fine.
-            let time = ScheduleManager::get_announced_reset_timestamp(meeting).await;
-            let now = Local::now().timestamp();
-
-            if time != -1 && now > time {
-                ScheduleManager::reset_announced_state(meeting).await;
-            }
+            reset_suspended_if_necessary(meeting).await;
         }
     }
 }
@@ -229,6 +239,61 @@ async fn bot_shell(ctx: Context) {
     }
 }
 
+// certainly not the prettiest function
+async fn load_save_data(ctx: &Context) {
+    let meeting_json = Path::new(MEETING_JSON_PATH);
+    if !meeting_json.exists() {
+        _ = File::create(meeting_json)
+            .await
+            .expect("failed to create file");
+    }
+
+    let json = tokio::fs::read_to_string(&meeting_json)
+        .await
+        .unwrap_or("[]".to_string());
+
+    if json == "[]" {
+        discord_log!(&ctx.http, "**warn**: meetings.json was empty.");
+    }
+
+    ScheduleManager::deserialize_from_json(json.as_str()).await;
+    println!(
+        "loaded {} meetings.",
+        ScheduleManager::meeting_count().await
+    );
+
+    let suspended_json = Path::new(SUSPENDED_JSON_PATH);
+    if !suspended_json.exists() {
+        _ = File::create(suspended_json)
+            .await
+            .expect("failed to create suspended.json");
+    }
+
+
+    let json = tokio::fs::read_to_string(&suspended_json)
+        .await
+        .unwrap_or("".to_string());
+
+    // so yeah, this is ugly, maybe refactor sometime so this isn't all a mess.
+    if let Ok(data) = serde_json::from_str::<Vec<(ScheduledMeeting, Suspended)>>(&json) {
+        let schedule = ScheduleManager::get_schedule().await;
+        let mut temp_sus = ScheduleManager::get_suspension_map().await;
+
+        let mut count = 0usize;
+        for (meet, sus) in data {
+            if !schedule.contains(&meet) || is_suspension_done(&meet, sus.reschedule) {
+                continue;
+            }
+
+            temp_sus.insert(meet, sus);
+            count += 1;
+        }
+        println!("loaded {} suspended meetings", count);
+    } else {
+        discord_log!(&ctx.http, "**warn**: suspended.json was empty or unable to be read.");
+    }
+}
+
 #[async_trait]
 impl EventHandler for Handler {
     async fn cache_ready(&self, _ctx: Context, _guilds: Vec<GuildId>) {}
@@ -238,28 +303,7 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, data_about_bot: Ready) {
         println!("connected to {}", data_about_bot.user.name);
 
-        {
-            let meeting_json = Path::new(MEETING_JSON_PATH);
-            if !meeting_json.exists() {
-                _ = File::create(meeting_json)
-                    .await
-                    .expect("failed to create file");
-            }
-
-            let json = tokio::fs::read_to_string(&meeting_json)
-                .await
-                .unwrap_or("[]".to_string());
-
-            if json == "[]" {
-                discord_log!(&ctx.http, "**warn**: meetings.json was empty.");
-            }
-
-            ScheduleManager::deserialize_from_json(json.as_str()).await;
-            println!(
-                "loaded {} meetings.",
-                ScheduleManager::meeting_count().await
-            );
-        }
+        load_save_data(&ctx).await;
 
         Command::create_global_command(&ctx.http, commands::announce::register())
             .await
@@ -464,8 +508,10 @@ async fn main() {
                 "Saving data (meetings={})",
                 ScheduleManager::get_schedule().await.len()
             );
-            saveutil::save_all().await;
-            println!("done!");
+            saveutil::save_all_meetings().await;
+            println!("saved meetings");
+            saveutil::save_suspended().await;
+            println!("saved suspended");
         },
     )
     .await;

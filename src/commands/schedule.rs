@@ -77,7 +77,7 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
         Ok(_) => {
             _ = util::create_public_response(&cmd, &ctx.http, &format!("Scheduled a meeting for {day} at {start_hour:02}:{start_minute:02} until {end_hour:02}:{end_minute:02}. Location: {location}. Only this week? {onetime}")).await;
             if !onetime {
-                saveutil::save_all().await;
+                saveutil::save_all_meetings().await;
             }
         }
         Err(why) => {

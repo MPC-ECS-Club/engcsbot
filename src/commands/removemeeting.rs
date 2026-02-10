@@ -30,29 +30,18 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
         return;
     };
 
-    let mut schedule = ScheduleManager::get_schedule().await;
-
-    let meetings_to_remove: Vec<usize> = schedule
-        .iter()
-        .enumerate()
-        .filter(|(_, m)| m.start == start && m.end == end && m.onetime == onetime)
-        .map(|(i, _)| i)
-        .collect();
-
-    meetings_to_remove
-        .iter()
-        .rev()
-        .for_each(|i| _ = schedule.swap_remove(*i));
+    let total = ScheduleManager::remove_matching(start, end, onetime).await;
 
     let msg = CreateInteractionResponseMessage::new()
-        .content(format!("Removing {} meetings.", meetings_to_remove.len()))
+        .content(format!("Removing {} meetings.", total))
         .ephemeral(true);
 
     let builder = CreateInteractionResponse::Message(msg);
 
     _ = cmd.create_response(&ctx.http, builder).await;
 
-    saveutil::save_all().await
+    saveutil::save_all_meetings().await;
+    saveutil::save_suspended().await;
 }
 
 pub fn register() -> CreateCommand {

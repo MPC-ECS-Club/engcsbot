@@ -1,9 +1,11 @@
 use chrono::{DateTime, Datelike, Local, Timelike, Weekday};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::{Add, Deref};
 use std::sync::LazyLock;
 use tokio::sync::{Mutex, MutexGuard};
+use crate::data::saveutil;
 
 static SCHEDULED: LazyLock<Mutex<Vec<ScheduledMeeting>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
@@ -13,15 +15,15 @@ static TEMPORARILY_SUSPENDED: LazyLock<Mutex<HashMap<ScheduledMeeting, Suspended
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash)]
-enum SuspendReason {
+pub enum SuspendReason {
     AlreadyAnnounced,
     Cancelled,
 }
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash)]
-struct Suspended {
-    reason: SuspendReason,
-    reschedule: i64,
+pub struct Suspended {
+    pub reason: SuspendReason,
+    pub reschedule: i64,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -64,6 +66,29 @@ impl ScheduledMeeting {
 pub struct ScheduleManager;
 
 impl ScheduleManager {
+    pub async fn remove_matching(start: (u32, u32), end: (u32, u32), onetime: bool) -> usize {
+        let mut schedule = ScheduleManager::get_schedule().await;
+        let mut temp_sus = ScheduleManager::get_suspension_map().await;
+
+        let meetings_to_remove: Vec<(usize, ScheduledMeeting)> = schedule
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| m.start == start && m.end == end && m.onetime == onetime)
+            .map(|(i, m)| (i, m.clone()))
+            .collect();
+        
+        let total = meetings_to_remove.len();
+        
+        meetings_to_remove.iter()
+            .rev()
+            .for_each(|(idx, meeting)| {
+                temp_sus.remove(meeting);
+                schedule.swap_remove(*idx);
+            });
+        
+        total
+    }
+    
     pub async fn get_schedule() -> MutexGuard<'static, Vec<ScheduledMeeting>> {
         SCHEDULED.lock().await
     }
@@ -90,6 +115,10 @@ impl ScheduleManager {
             .map(|v| v.reschedule)
             .unwrap_or(-1)
     }
+    
+    pub async fn get_suspension_map() -> MutexGuard<'static, HashMap<ScheduledMeeting, Suspended>> {
+        TEMPORARILY_SUSPENDED.lock().await
+    }
 
     pub async fn cancel_meeting(meeting: ScheduledMeeting) -> DateTime<Local> {
         // ensure that the meeting is announced so we shave off a bit off time from the suspension
@@ -102,7 +131,9 @@ impl ScheduleManager {
                 reschedule: when.timestamp(),
             },
         );
-
+        
+        saveutil::save_suspended().await;
+        
         when
     }
 
