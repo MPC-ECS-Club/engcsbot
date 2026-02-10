@@ -13,13 +13,13 @@ pub async fn save_all_meetings() {
 
 pub async fn save_suspended() {
     let suspended = ScheduleManager::get_suspension_map().await;
-    
+
     let mut pairs: Vec<(ScheduledMeeting, Suspended)> = Vec::with_capacity(suspended.len());
-    
+
     for (meet, sus) in suspended.deref() {
-        pairs.push((meet.clone(), sus.clone()));
+        pairs.push((meet.clone(), *sus));
     }
-    
+
     let json = serde_json::to_string(&pairs).expect("failed to serialize suspended");
     tokio::fs::write(SUSPENDED_JSON_PATH, json)
         .await

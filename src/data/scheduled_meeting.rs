@@ -1,11 +1,11 @@
+use crate::data::saveutil;
 use chrono::{DateTime, Datelike, Local, Timelike, Weekday};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::hash::{Hash};
 use std::ops::{Add, Deref};
 use std::sync::LazyLock;
 use tokio::sync::{Mutex, MutexGuard};
-use crate::data::saveutil;
 
 static SCHEDULED: LazyLock<Mutex<Vec<ScheduledMeeting>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
@@ -76,19 +76,19 @@ impl ScheduleManager {
             .filter(|(_, m)| m.start == start && m.end == end && m.onetime == onetime)
             .map(|(i, m)| (i, m.clone()))
             .collect();
-        
+
         let total = meetings_to_remove.len();
-        
+
         meetings_to_remove.iter()
             .rev()
             .for_each(|(idx, meeting)| {
                 temp_sus.remove(meeting);
                 schedule.swap_remove(*idx);
             });
-        
+
         total
     }
-    
+
     pub async fn get_schedule() -> MutexGuard<'static, Vec<ScheduledMeeting>> {
         SCHEDULED.lock().await
     }
@@ -115,7 +115,7 @@ impl ScheduleManager {
             .map(|v| v.reschedule)
             .unwrap_or(-1)
     }
-    
+
     pub async fn get_suspension_map() -> MutexGuard<'static, HashMap<ScheduledMeeting, Suspended>> {
         TEMPORARILY_SUSPENDED.lock().await
     }
@@ -131,9 +131,9 @@ impl ScheduleManager {
                 reschedule: when.timestamp(),
             },
         );
-        
+
         saveutil::save_suspended().await;
-        
+
         when
     }
 

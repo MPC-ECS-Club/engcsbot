@@ -1,7 +1,6 @@
 mod commands;
 mod data;
 
-use std::collections::HashMap;
 use crate::data::saveutil;
 use crate::data::scheduled_meeting::{ScheduleManager, ScheduledMeeting, Suspended};
 use chrono::{DateTime, Datelike, Local, Timelike};
