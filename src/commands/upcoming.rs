@@ -2,13 +2,21 @@ use crate::data::scheduled_meeting::{ScheduleManager, ScheduledMeeting};
 use crate::{get_clock_emoji_for_hour, to_12_hr_clock_str};
 use chrono::Weekday;
 use chrono::Weekday::{Fri, Mon, Sat, Sun, Thu, Tue, Wed};
-use serenity::all::{Color, CommandInteraction, Context, CreateCommand, CreateEmbed, CreateInteractionResponse, CreateInteractionResponseMessage};
+use serenity::all::{
+    Color, CommandInteraction, Context, CreateCommand, CreateEmbed, CreateInteractionResponse,
+    CreateInteractionResponseMessage,
+};
 
-fn meeting_to_string(m: &ScheduledMeeting) -> String {
+async fn meeting_to_string(m: &ScheduledMeeting) -> String {
     let extra = if m.onetime { " (just this week)" } else { "" };
+    let canceled_extra = if ScheduleManager::is_meeting_cancelled(&m).await {
+        "❌️ CANCELLED "
+    } else {
+        "✅️ "
+    };
 
     format!(
-        "{} {} **to** {} {}{} 🪐 {}",
+        "{canceled_extra}{} {} **to** {} {}{} 🪐 {}",
         get_clock_emoji_for_hour(m.start.0),
         to_12_hr_clock_str(m.start),
         get_clock_emoji_for_hour(m.end.0),
@@ -18,26 +26,27 @@ fn meeting_to_string(m: &ScheduledMeeting) -> String {
     )
 }
 
-fn get_meetings_for_day(day: Weekday, meetings: &[ScheduledMeeting]) -> String {
-    meetings
-        .iter()
-        .filter(|m| m.day == day)
-        .map(meeting_to_string)
-        .collect::<Vec<String>>()
-        .join("\n")
+async fn get_meetings_for_day(day: Weekday, meetings: &[ScheduledMeeting]) -> String {
+    let mut res: Vec<String> = Vec::with_capacity(meetings.len());
+
+    for meet in meetings.iter().filter(|m| m.day == day) {
+        res.push(meeting_to_string(meet).await);
+    }
+
+    res.join("\n")
 }
 
 pub async fn run(ctx: &Context, cmd: CommandInteraction) {
     let schedule = ScheduleManager::get_schedule().await;
 
     // duplicated code!!
-    let mondays = get_meetings_for_day(Mon, &schedule);
-    let tuesdays = get_meetings_for_day(Tue, &schedule);
-    let wednesdays = get_meetings_for_day(Wed, &schedule);
-    let thursdays = get_meetings_for_day(Thu, &schedule);
-    let fridays = get_meetings_for_day(Fri, &schedule);
-    let saturdays = get_meetings_for_day(Sat, &schedule);
-    let sundays = get_meetings_for_day(Sun, &schedule);
+    let mondays = get_meetings_for_day(Mon, &schedule).await;
+    let tuesdays = get_meetings_for_day(Tue, &schedule).await;
+    let wednesdays = get_meetings_for_day(Wed, &schedule).await;
+    let thursdays = get_meetings_for_day(Thu, &schedule).await;
+    let fridays = get_meetings_for_day(Fri, &schedule).await;
+    let saturdays = get_meetings_for_day(Sat, &schedule).await;
+    let sundays = get_meetings_for_day(Sun, &schedule).await;
 
     drop(schedule);
 
@@ -52,8 +61,7 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
         .field("Saturdays", saturdays, false)
         .field("Sundays", sundays, false);
 
-    let msg = CreateInteractionResponseMessage::new()
-        .embed(embed);
+    let msg = CreateInteractionResponseMessage::new().embed(embed);
 
     let builder = CreateInteractionResponse::Message(msg);
 

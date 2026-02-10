@@ -17,9 +17,11 @@ use serenity::{
 use std::convert::Into;
 use std::ops::Deref;
 use std::path::Path;
+use std::process::exit;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::File;
+use tokio::io::AsyncBufReadExt;
 
 const ANNOUNCEMENT_EPSILON_MINS: u32 = 0;
 
@@ -162,7 +164,8 @@ async fn start_time_checking_loop(ctx: Context) {
             }
         }
 
-        to_remove.iter()
+        to_remove
+            .iter()
             .rev()
             .for_each(|i| _ = meetings.swap_remove(*i));
     }
@@ -175,7 +178,7 @@ async fn reset_announced_state() {
         tokio::time::sleep(UPDATE_RATE).await;
 
         for meeting in ScheduleManager::get_schedule().await.deref() {
-            // I lock onto the same map two times here, perhaps I should just get it first, but im sure its fine.
+            // I lock onto the same map two times here, perhaps I should just get it first, but im sure it's fine.
             let time = ScheduleManager::get_announced_reset_timestamp(meeting).await;
             let now = Local::now().timestamp();
 
@@ -183,6 +186,34 @@ async fn reset_announced_state() {
                 ScheduleManager::reset_announced_state(meeting).await;
             }
         }
+    }
+}
+
+async fn bot_shell(ctx: Context) {
+    let stdin = tokio::io::stdin();
+    let mut reader = tokio::io::BufReader::new(stdin);
+    loop {
+        let mut buf = String::new();
+        if let Err(why) = reader.read_line(&mut buf).await {
+            eprintln!("failed to read from stdin: {}", why);
+        }
+        let buf = buf.trim();
+        println!(">> {buf}");
+
+        match buf {
+            "delete-commands" => { // for debugging
+                println!("deleting commands");
+                let cmds = Command::get_global_commands(&ctx.http).await;
+                let Ok(cmds) = cmds else { continue; };
+
+                for cmd in cmds {
+                    _ = Command::delete_global_command(&ctx.http, cmd.id)
+                        .await;
+                }
+                println!("done.");
+            },
+            _ => (),
+        };
     }
 }
 
@@ -218,11 +249,7 @@ impl EventHandler for Handler {
             );
         }
 
-        for cmd in Command::get_global_commands(&ctx.http).await.unwrap() {
-            Command::delete_global_command(&ctx.http, cmd.id)
-                .await
-                .unwrap();
-        }
+
 
         Command::create_global_command(&ctx.http, commands::announce::register())
             .await
@@ -242,6 +269,11 @@ impl EventHandler for Handler {
         Command::create_global_command(&ctx.http, commands::removemeeting::register())
             .await
             .expect("removemeeting command");
+        Command::create_global_command(&ctx.http, commands::cancelday::register())
+            .await
+            .expect("cancelday command");
+
+        println!("commands registered successfully!");
 
         {
             let ctx = ctx.clone();
@@ -273,6 +305,13 @@ impl EventHandler for Handler {
                     i = (i + 1) % STATUSES.len();
                     tokio::time::sleep(STATUS_TIME).await;
                 }
+            });
+        }
+
+        {
+            let ctx = ctx.clone();
+            tokio::spawn(async move {
+                bot_shell(ctx).await;
             });
         }
 
@@ -315,6 +354,12 @@ impl EventHandler for Handler {
                 "removemeeting" => {
                     with_timeout(async move {
                         commands::removemeeting::run(&ctx, cmd).await;
+                    })
+                    .await
+                }
+                "cancelday" => {
+                    with_timeout(async move {
+                        commands::cancelday::run(&ctx, cmd).await;
                     })
                     .await
                 }
@@ -401,12 +446,19 @@ async fn main() {
         }
     }
 
-    with_timeout_of(Duration::from_secs(8), "failed to save, timed out.", async move {
-        println!(
-            "Saving data (meetings={})",
-            ScheduleManager::get_schedule().await.len()
-        );
-        saveutil::save_all().await;
-        println!("done!");
-    }).await;
+    with_timeout_of(
+        Duration::from_secs(8),
+        "failed to save, timed out.",
+        async move {
+            println!(
+                "Saving data (meetings={})",
+                ScheduleManager::get_schedule().await.len()
+            );
+            saveutil::save_all().await;
+            println!("done!");
+        },
+    )
+    .await;
+
+    exit(0); // required to prevent the bot shell function from blocking
 }
