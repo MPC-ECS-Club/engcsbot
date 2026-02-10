@@ -26,8 +26,9 @@ use tokio::io::AsyncBufReadExt;
 
 const ANNOUNCEMENT_EPSILON_MINS: u32 = 0;
 
-const MEETING_JSON_PATH: &str = "./meetings.json";
-const SUSPENDED_JSON_PATH: &str = "./suspended.json";
+const DATA_DIRECTORY: &str = "./bot-storage/";
+const MEETING_JSON_PATH: &str = "./bot-storage/meetings.json";
+const SUSPENDED_JSON_PATH: &str = "./bot-storage/suspended.json";
 
 const LOG_CHANNEL_ID: ChannelId = ChannelId::new(1470495355329183744);
 
@@ -173,7 +174,7 @@ async fn start_time_checking_loop(ctx: Context) {
     }
 }
 
-fn is_suspension_done(meeting: &ScheduledMeeting, reset_timestamp: i64) -> bool{
+fn is_suspension_done(reset_timestamp: i64) -> bool{
     let now = Local::now().timestamp();
 
     reset_timestamp != -1 && now > reset_timestamp
@@ -182,7 +183,7 @@ fn is_suspension_done(meeting: &ScheduledMeeting, reset_timestamp: i64) -> bool{
 async fn reset_suspended_if_necessary(meeting: &ScheduledMeeting) {
     let time = ScheduleManager::get_announced_reset_timestamp(meeting).await;
 
-    if is_suspension_done(meeting, time) { // maybe don't lock again, and just store the map?
+    if is_suspension_done(time) { // maybe don't lock again, and just store the map?
         ScheduleManager::reset_announced_state(meeting).await;
     }
 }
@@ -241,6 +242,12 @@ async fn bot_shell(ctx: Context) {
 
 // certainly not the prettiest function
 async fn load_save_data(ctx: &Context) {
+    let data = Path::new(DATA_DIRECTORY);
+
+    if !data.exists() {
+        tokio::fs::create_dir(data).await.unwrap();
+    }
+
     let meeting_json = Path::new(MEETING_JSON_PATH);
     if !meeting_json.exists() {
         _ = File::create(meeting_json)
@@ -281,7 +288,7 @@ async fn load_save_data(ctx: &Context) {
 
         let mut count = 0usize;
         for (meet, sus) in data {
-            if !schedule.contains(&meet) || is_suspension_done(&meet, sus.reschedule) {
+            if !schedule.contains(&meet) || is_suspension_done(sus.reschedule) {
                 continue;
             }
 
