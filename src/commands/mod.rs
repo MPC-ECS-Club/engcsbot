@@ -5,3 +5,4 @@ pub mod info;
 pub mod schedule;
 pub mod shutdown;
 pub mod upcoming;
+pub mod removemeeting;

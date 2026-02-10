@@ -6,8 +6,8 @@ use std::sync::{Arc, LazyLock};
 use tokio::sync::{Mutex, MutexGuard};
 
 // probably doesn't need to be Arc
-static SCHEDULED: LazyLock<Arc<Mutex<Vec<ScheduledMeeting>>>> =
-    LazyLock::new(|| Arc::new(Mutex::new(Vec::new())));
+static SCHEDULED: LazyLock<Mutex<Vec<ScheduledMeeting>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
 
 // probably not the best way to do this, but who cares.
 // mapping from Meeting => unix timestamp of when it should be rescheduled.

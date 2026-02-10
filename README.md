@@ -30,7 +30,7 @@ bash script named `engcsbot-launch` and edit it to contain the following:
 ```bash
 #!/usr/bin/env bash
 
-RUST_TRACEBACK=1 DISCORD_TOKEN=$(cat token.txt) nohup ./engcsbot > log.txt 2>&1 &
+RUST_TRACEBACK=1 DISCORD_TOKEN=$(cat prodtoken.txt) nohup ./engcsbot > log.txt 2>&1 &
 ```
 Then ensure the script is executable `chmod +x engcsbot-launch`. By running this script, it will launch the bot in the background
 and write to `log.txt` for logs. You can now safely disconnect from SSH without turning off the bot.

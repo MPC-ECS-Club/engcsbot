@@ -94,7 +94,7 @@ async fn start_time_checking_loop(ctx: Context) {
         let dt = Local::now();
         let weekday = dt.weekday();
 
-        let mut toRemove: Vec<usize> = vec![];
+        let mut to_remove: Vec<usize> = vec![];
 
         let mut meetings = ScheduleManager::get_schedule().await;
         for (i, meeting) in meetings.deref().iter().enumerate() {
@@ -153,7 +153,7 @@ async fn start_time_checking_loop(ctx: Context) {
                 }
 
                 if meeting.onetime {
-                    toRemove.push(i);
+                    to_remove.push(i);
                 } else {
                     // maybe avoid this clone, doesn't really matter it's not *that* expensive, and it doesn't occur that often.
                     ScheduleManager::set_already_announced(meeting.clone(), meeting_end_epoch_time)
@@ -162,7 +162,7 @@ async fn start_time_checking_loop(ctx: Context) {
             }
         }
 
-        toRemove.iter()
+        to_remove.iter()
             .rev()
             .for_each(|i| _ = meetings.swap_remove(*i));
     }
@@ -205,7 +205,11 @@ impl EventHandler for Handler {
 
             let json = tokio::fs::read_to_string(&meeting_json)
                 .await
-                .expect("failed to read file");
+                .unwrap_or("[]".to_string());
+
+            if json == "[]" {
+                discord_log!(&ctx.http, "**warn**: meetings.json was empty.");
+            }
 
             ScheduleManager::deserialize_from_json(json.as_str()).await;
             println!(
@@ -235,6 +239,9 @@ impl EventHandler for Handler {
         Command::create_global_command(&ctx.http, commands::upcoming::register())
             .await
             .expect("upcoming command");
+        Command::create_global_command(&ctx.http, commands::removemeeting::register())
+            .await
+            .expect("removemeeting command");
 
         {
             let ctx = ctx.clone();
@@ -302,6 +309,12 @@ impl EventHandler for Handler {
                 "upcoming" => {
                     with_timeout(async move {
                         commands::upcoming::run(&ctx, cmd).await;
+                    })
+                    .await
+                }
+                "removemeeting" => {
+                    with_timeout(async move {
+                        commands::removemeeting::run(&ctx, cmd).await;
                     })
                     .await
                 }

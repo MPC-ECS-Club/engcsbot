@@ -84,7 +84,7 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
             _ = util::create_private_response(
                 &cmd,
                 &ctx.http,
-                "Something went wrong while making this meeting. Check logs",
+                "Something went wrong while making this meeting. You cannot schedule a meeting that already exists.",
             )
             .await;
             discord_log!(&ctx.http, "failed to create meeting: {why:?}");

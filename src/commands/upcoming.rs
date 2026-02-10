@@ -2,21 +2,19 @@ use crate::data::scheduled_meeting::{ScheduleManager, ScheduledMeeting};
 use crate::{get_clock_emoji_for_hour, to_12_hr_clock_str};
 use chrono::Weekday;
 use chrono::Weekday::{Fri, Mon, Sat, Sun, Thu, Tue, Wed};
-use serenity::all::{
-    CommandInteraction, Context, CreateCommand, CreateEmbed, CreateInteractionResponse,
-    CreateInteractionResponseMessage,
-};
+use serenity::all::{Color, CommandInteraction, Context, CreateCommand, CreateEmbed, CreateInteractionResponse, CreateInteractionResponseMessage};
 
 fn meeting_to_string(m: &ScheduledMeeting) -> String {
     let extra = if m.onetime { " (just this week)" } else { "" };
 
     format!(
-        "{} {}: to {} {}{}",
+        "{} {} **to** {} {}{} 🪐 {}",
         get_clock_emoji_for_hour(m.start.0),
         to_12_hr_clock_str(m.start),
         get_clock_emoji_for_hour(m.end.0),
         to_12_hr_clock_str(m.end),
-        extra
+        extra,
+        m.location,
     )
 }
 
@@ -45,6 +43,7 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
 
     let embed = CreateEmbed::new()
         .title("Upcoming Meetings")
+        .color(Color::ORANGE)
         .field("Monday", mondays, false)
         .field("Tuesdays", tuesdays, false)
         .field("Wednesdays", wednesdays, false)
@@ -53,7 +52,8 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
         .field("Saturdays", saturdays, false)
         .field("Sundays", sundays, false);
 
-    let msg = CreateInteractionResponseMessage::new().embed(embed);
+    let msg = CreateInteractionResponseMessage::new()
+        .embed(embed);
 
     let builder = CreateInteractionResponse::Message(msg);
 
