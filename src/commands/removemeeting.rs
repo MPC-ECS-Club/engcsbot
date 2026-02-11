@@ -1,7 +1,7 @@
-use chrono::Weekday;
 use crate::commands::util;
 use crate::data::saveutil;
 use crate::data::scheduled_meeting::ScheduleManager;
+use chrono::Weekday;
 use serenity::all::{
     CommandInteraction, CommandOptionType, Context, CreateCommand, CreateCommandOption,
     CreateInteractionResponse, CreateInteractionResponseMessage,
