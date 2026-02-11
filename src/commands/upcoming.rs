@@ -51,7 +51,7 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
     drop(schedule);
 
     let embed = CreateEmbed::new()
-        .title("Upcoming Meetings")
+        .title("🗓️ Upcoming Meetings")
         .color(Color::ORANGE)
         .field("Monday", mondays, false)
         .field("Tuesdays", tuesdays, false)

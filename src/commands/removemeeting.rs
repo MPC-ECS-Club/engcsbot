@@ -1,3 +1,4 @@
+use chrono::Weekday;
 use crate::commands::util;
 use crate::data::saveutil;
 use crate::data::scheduled_meeting::ScheduleManager;
@@ -9,16 +10,25 @@ use serenity::all::{
 pub async fn run(ctx: &Context, cmd: CommandInteraction) {
     let options = &cmd.data.options;
 
-    let Some(start) = &options.first().unwrap().value.as_str() else {
+    // kinda of an error-prone approach, perhaps make some utility to help with this.
+    let Some(day) = &options.first().unwrap().value.as_str() else {
         return;
     };
-    let Some(end) = &options.get(1).unwrap().value.as_str() else {
+    let Some(start) = &options.get(1).unwrap().value.as_str() else {
+        return;
+    };
+    let Some(end) = &options.get(2).unwrap().value.as_str() else {
         return;
     };
     let onetime = options
         .iter()
         .find(|d| d.name == "onetime")
         .is_some_and(|v| v.value.as_bool().unwrap_or(false));
+
+    let Ok(day) = day.parse::<Weekday>() else {
+        _ = util::create_private_response(&cmd, &ctx.http, "Invalid week day!");
+        return;
+    };
 
     let Some(start) = util::parse_time(start) else {
         _ = util::create_private_response(&cmd, &ctx.http, "Invalid start time!");
@@ -30,7 +40,7 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
         return;
     };
 
-    let total = ScheduleManager::remove_matching(start, end, onetime).await;
+    let total = ScheduleManager::remove_matching(day, start, end, onetime).await;
 
     let msg = CreateInteractionResponseMessage::new()
         .content(format!("Removing {} meetings.", total))
@@ -46,7 +56,11 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
 
 pub fn register() -> CreateCommand {
     CreateCommand::new("removemeeting")
-        .description("Remove a particular meeting based on it's start and end times.")
+        .description("Remove a particular meeting based on it's day, start and end times.")
+        .add_option(
+            CreateCommandOption::new(CommandOptionType::String, "day", "Monday, Tue, ...")
+                .required(true),
+        )
         .add_option(
             CreateCommandOption::new(CommandOptionType::String, "start", "12:00pm, 1:30pm")
                 .required(true),

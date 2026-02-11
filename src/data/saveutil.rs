@@ -1,6 +1,6 @@
-use std::ops::Deref;
-use crate::{MEETING_JSON_PATH, SUSPENDED_JSON_PATH};
 use crate::data::scheduled_meeting::{ScheduleManager, ScheduledMeeting, Suspended};
+use crate::{MEETING_JSON_PATH, SUSPENDED_JSON_PATH};
+use std::ops::Deref;
 
 pub async fn save_all_meetings() {
     let json = ScheduleManager::serialize_to_json()

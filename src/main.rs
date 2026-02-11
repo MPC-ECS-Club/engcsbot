@@ -173,7 +173,7 @@ async fn start_time_checking_loop(ctx: Context) {
     }
 }
 
-fn is_suspension_done(reset_timestamp: i64) -> bool{
+fn is_suspension_done(reset_timestamp: i64) -> bool {
     let now = Local::now().timestamp();
 
     reset_timestamp != -1 && now > reset_timestamp
@@ -184,7 +184,8 @@ async fn reset_suspended_if_necessary(meeting: &ScheduledMeeting) -> bool {
     let time = ScheduleManager::get_suspension_restore_timestamp(meeting).await;
 
     let mut should_refresh = false;
-    if is_suspension_done(time) { // maybe don't lock again, and just store the map?
+    if is_suspension_done(time) {
+        // maybe don't lock again, and just store the map?
         should_refresh = true;
         ScheduleManager::unsuspend(meeting).await;
     }
@@ -284,7 +285,6 @@ async fn load_save_data(ctx: &Context) {
             .expect("failed to create suspended.json");
     }
 
-
     let json = tokio::fs::read_to_string(&suspended_json)
         .await
         .unwrap_or("".to_string());
@@ -305,7 +305,10 @@ async fn load_save_data(ctx: &Context) {
         }
         println!("loaded {} suspended meetings", count);
     } else {
-        discord_log!(&ctx.http, "**warn**: suspended.json was empty or unable to be read.");
+        discord_log!(
+            &ctx.http,
+            "**warn**: suspended.json was empty or unable to be read."
+        );
     }
 }
 

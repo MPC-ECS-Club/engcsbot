@@ -2,7 +2,7 @@ use crate::data::saveutil;
 use chrono::{DateTime, Datelike, Local, Timelike, Weekday};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::hash::{Hash};
+use std::hash::Hash;
 use std::ops::{Add, Deref};
 use std::sync::LazyLock;
 use tokio::sync::{Mutex, MutexGuard};
@@ -66,25 +66,30 @@ impl ScheduledMeeting {
 pub struct ScheduleManager;
 
 impl ScheduleManager {
-    pub async fn remove_matching(start: (u32, u32), end: (u32, u32), onetime: bool) -> usize {
+    pub async fn remove_matching(
+        day: Weekday,
+        start: (u32, u32),
+        end: (u32, u32),
+        onetime: bool,
+    ) -> usize {
         let mut schedule = ScheduleManager::get_schedule().await;
         let mut temp_sus = ScheduleManager::get_suspension_map().await;
 
         let meetings_to_remove: Vec<(usize, ScheduledMeeting)> = schedule
             .iter()
             .enumerate()
-            .filter(|(_, m)| m.start == start && m.end == end && m.onetime == onetime)
+            .filter(|(_, m)| {
+                m.day == day && m.start == start && m.end == end && m.onetime == onetime
+            })
             .map(|(i, m)| (i, m.clone()))
             .collect();
 
         let total = meetings_to_remove.len();
 
-        meetings_to_remove.iter()
-            .rev()
-            .for_each(|(idx, meeting)| {
-                temp_sus.remove(meeting);
-                schedule.swap_remove(*idx);
-            });
+        meetings_to_remove.iter().rev().for_each(|(idx, meeting)| {
+            temp_sus.remove(meeting);
+            schedule.swap_remove(*idx);
+        });
 
         total
     }
