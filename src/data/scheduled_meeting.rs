@@ -127,7 +127,8 @@ impl ScheduleManager {
 
     pub async fn cancel_meeting(meeting: ScheduledMeeting) -> DateTime<Local> {
         // ensure that the meeting is announced so we shave off a bit off time from the suspension
-        let when = meeting.get_datetime_of_next().with_hour(0).unwrap();
+        let next_time = meeting.get_datetime_of_next();
+        let when = next_time.add(chrono::Duration::days(1)).with_hour(0).unwrap();
 
         TEMPORARILY_SUSPENDED.lock().await.insert(
             meeting,

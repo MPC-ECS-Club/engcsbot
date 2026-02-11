@@ -5,6 +5,7 @@ use serenity::all::{
     CommandInteraction, CommandOptionType, Context, CreateCommand, CreateCommandOption,
     CreateInteractionResponse, CreateInteractionResponseMessage,
 };
+use crate::discord_log;
 
 pub async fn run(ctx: &Context, cmd: CommandInteraction) {
     let options = &cmd.data.options;
@@ -26,7 +27,7 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
 
     for meeting in desired {
         let until = ScheduleManager::cancel_meeting(meeting).await;
-        println!("meeting cancelled until {}", until);
+        discord_log!(&ctx.http, "meeting cancelled until {}", until);
     }
 
     let msg = CreateInteractionResponseMessage::new()

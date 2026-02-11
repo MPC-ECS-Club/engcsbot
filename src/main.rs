@@ -209,6 +209,7 @@ async fn reset_announced_state() {
     }
 }
 
+#[cfg(debug_assertions)]
 async fn bot_shell(ctx: Context) {
     let stdin = tokio::io::stdin();
     let mut reader = tokio::io::BufReader::new(stdin);
