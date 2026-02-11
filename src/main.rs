@@ -179,12 +179,17 @@ fn is_suspension_done(reset_timestamp: i64) -> bool{
     reset_timestamp != -1 && now > reset_timestamp
 }
 
-async fn reset_suspended_if_necessary(meeting: &ScheduledMeeting) {
-    let time = ScheduleManager::get_announced_reset_timestamp(meeting).await;
+// Returns whether or not the suspend.json file should be refreshed.
+async fn reset_suspended_if_necessary(meeting: &ScheduledMeeting) -> bool {
+    let time = ScheduleManager::get_suspension_restore_timestamp(meeting).await;
 
+    let mut should_refresh = false;
     if is_suspension_done(time) { // maybe don't lock again, and just store the map?
-        ScheduleManager::reset_announced_state(meeting).await;
+        should_refresh = true;
+        ScheduleManager::unsuspend(meeting).await;
     }
+
+    should_refresh
 }
 
 async fn reset_announced_state() {
@@ -194,7 +199,11 @@ async fn reset_announced_state() {
         tokio::time::sleep(UPDATE_RATE).await;
 
         for meeting in ScheduleManager::get_schedule().await.deref() {
-            reset_suspended_if_necessary(meeting).await;
+            let should_refresh = reset_suspended_if_necessary(meeting).await;
+            if should_refresh {
+                println!("refreshing suspend.json");
+                saveutil::save_suspended().await;
+            }
         }
     }
 }

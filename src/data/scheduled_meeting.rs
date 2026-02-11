@@ -107,7 +107,7 @@ impl ScheduleManager {
         TEMPORARILY_SUSPENDED.lock().await.contains_key(meeting)
     }
 
-    pub async fn get_announced_reset_timestamp(meeting: &ScheduledMeeting) -> i64 {
+    pub async fn get_suspension_restore_timestamp(meeting: &ScheduledMeeting) -> i64 {
         TEMPORARILY_SUSPENDED
             .lock()
             .await
@@ -145,7 +145,7 @@ impl ScheduleManager {
             .is_some_and(|val| val.reason == SuspendReason::Cancelled)
     }
 
-    pub async fn reset_announced_state(meeting: &ScheduledMeeting) {
+    pub async fn unsuspend(meeting: &ScheduledMeeting) {
         TEMPORARILY_SUSPENDED.lock().await.remove(meeting);
     }
 
