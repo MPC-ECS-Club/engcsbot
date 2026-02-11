@@ -154,23 +154,23 @@ impl ScheduleManager {
         TEMPORARILY_SUSPENDED.lock().await.remove(meeting);
     }
 
-    pub async fn remove_meeting(meeting: &ScheduledMeeting) {
-        let mut sch = Self::get_schedule().await;
-        if let Some((i, _)) = sch.iter().enumerate().find(|(_, m)| *m == meeting) {
-            sch.swap_remove(i);
-        } else {
-            println!("attempted to remove meeting that wasn't registered.")
-        }
+    // pub async fn remove_meeting(meeting: &ScheduledMeeting) {
+    //     let mut sch = Self::get_schedule().await;
+    //     if let Some((i, _)) = sch.iter().enumerate().find(|(_, m)| *m == meeting) {
+    //         sch.swap_remove(i);
+    //     } else {
+    //         println!("attempted to remove meeting that wasn't registered.")
+    //     }
+    //
+    //     TEMPORARILY_SUSPENDED.lock().await.remove(meeting);
+    // }
 
-        TEMPORARILY_SUSPENDED.lock().await.remove(meeting);
-    }
+    // pub async fn has_meeting(meeting: &ScheduledMeeting) -> bool {
+    //     SCHEDULED.lock().await.contains(meeting)
+    // }
 
     pub async fn meeting_count() -> usize {
         Self::get_schedule().await.len()
-    }
-
-    pub async fn has_meeting(meeting: &ScheduledMeeting) -> bool {
-        SCHEDULED.lock().await.contains(meeting)
     }
 
     pub async fn add_meeting(meeting: ScheduledMeeting) -> Result<(), SchedulingError> {

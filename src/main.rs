@@ -224,14 +224,17 @@ async fn bot_shell(ctx: Context) {
             "delete-commands" => {
                 // for debugging
                 println!("deleting commands");
-                let cmds = Command::get_global_commands(&ctx.http).await;
-                let Ok(cmds) = cmds else {
-                    continue;
-                };
-
-                for cmd in cmds {
-                    _ = Command::delete_global_command(&ctx.http, cmd.id).await;
+                if let Err(why) = Command::set_global_commands(&ctx.http, vec![]).await {
+                    eprintln!("failed to set global commands: {:?}", why);
                 }
+                // let cmds = Command::get_global_commands(&ctx.http).await;
+                // let Ok(cmds) = cmds else {
+                //     continue;
+                // };
+                //
+                // for cmd in cmds {
+                //     _ = Command::delete_global_command(&ctx.http, cmd.id).await;
+                // }
                 println!("done.");
             }
             "delete-cmd-id" => {
@@ -344,6 +347,9 @@ impl EventHandler for Handler {
         Command::create_global_command(&ctx.http, commands::cancelday::register())
             .await
             .expect("cancelday command");
+        Command::create_global_command(&ctx.http, commands::jsonembed::register())
+            .await
+            .expect("jsonembed command");
 
         println!("commands registered successfully!");
 
@@ -380,6 +386,7 @@ impl EventHandler for Handler {
             });
         }
 
+        #[cfg(debug_assertions)]
         {
             let ctx = ctx.clone();
             tokio::spawn(async move {
@@ -432,6 +439,12 @@ impl EventHandler for Handler {
                 "cancelday" => {
                     with_timeout(async move {
                         commands::cancelday::run(&ctx, cmd).await;
+                    })
+                    .await
+                }
+                "jsonembed" => {
+                    with_timeout(async move {
+                        commands::jsonembed::run(&ctx, cmd).await;
                     })
                     .await
                 }
