@@ -23,6 +23,7 @@ struct JsonEmbedField {
 
 #[derive(Debug, Clone, Deserialize)]
 struct JsonEmbed {
+    message: Option<String>,
     title: String,
     description: Option<String>,
     fields: Vec<JsonEmbedField>,
@@ -94,8 +95,10 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
 
     match serde_json::from_str::<JsonEmbed>(json) {
         Ok(embed) => {
-
-            let msg = CreateInteractionResponseMessage::new().embed(embed.build_embed());
+            let message = embed.message.clone().unwrap_or_default();
+            let msg = CreateInteractionResponseMessage::new()
+                .content(message)
+                .embed(embed.build_embed());
 
             let builder = CreateInteractionResponse::Message(msg);
             _ = cmd.create_response(&ctx.http, builder).await;

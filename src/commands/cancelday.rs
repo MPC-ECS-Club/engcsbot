@@ -1,11 +1,11 @@
 use crate::commands::util;
 use crate::data::scheduled_meeting::{ScheduleManager, ScheduledMeeting};
+use crate::discord_log;
 use chrono::Weekday;
 use serenity::all::{
     CommandInteraction, CommandOptionType, Context, CreateCommand, CreateCommandOption,
     CreateInteractionResponse, CreateInteractionResponseMessage,
 };
-use crate::discord_log;
 
 pub async fn run(ctx: &Context, cmd: CommandInteraction) {
     let options = &cmd.data.options;

@@ -53,7 +53,8 @@ impl ScheduledMeeting {
             7 + meeting - today
         };
 
-        let desired = now.add(chrono::Duration::days(diff as i64))
+        let desired = now
+            .add(chrono::Duration::days(diff as i64))
             .with_hour(self.start.0)
             .unwrap()
             .with_minute(self.start.1)
@@ -64,7 +65,8 @@ impl ScheduledMeeting {
         // earlier we calculated the 'diff' by checking if meeting >= today
         // if the diff is 0, the next meeting is today, we want to check if it was earlier today
         // or later today.
-        if now > desired { // if it was earlier today
+        if now > desired {
+            // if it was earlier today
             desired.add(chrono::Duration::days(7)) // then we are probably talking about next week's meeting
         } else {
             desired // cancel today's meeting.
@@ -137,7 +139,10 @@ impl ScheduleManager {
     pub async fn cancel_meeting(meeting: ScheduledMeeting) -> DateTime<Local> {
         // ensure that the meeting is announced so we shave off a bit off time from the suspension
         let next_time = meeting.get_datetime_of_next();
-        let when = next_time.add(chrono::Duration::days(1)).with_hour(0).unwrap();
+        let when = next_time
+            .add(chrono::Duration::days(1))
+            .with_hour(0)
+            .unwrap();
 
         TEMPORARILY_SUSPENDED.lock().await.insert(
             meeting,
