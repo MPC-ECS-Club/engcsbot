@@ -47,19 +47,28 @@ impl ScheduledMeeting {
         let today = now.weekday().num_days_from_monday();
         let meeting = self.day.num_days_from_monday();
 
-        let diff = if meeting > today {
+        let diff = if meeting >= today {
             meeting - today
         } else {
             7 + meeting - today
         };
 
-        now.add(chrono::Duration::days(diff as i64))
+        let desired = now.add(chrono::Duration::days(diff as i64))
             .with_hour(self.start.0)
             .unwrap()
             .with_minute(self.start.1)
             .unwrap()
             .with_second(0)
-            .unwrap()
+            .unwrap();
+
+        // earlier we calculated the 'diff' by checking if meeting >= today
+        // if the diff is 0, the next meeting is today, we want to check if it was earlier today
+        // or later today.
+        if now > desired { // if it was earlier today
+            desired.add(chrono::Duration::days(7)) // then we are probably talking about next week's meeting
+        } else {
+            desired // cancel today's meeting.
+        }
     }
 }
 

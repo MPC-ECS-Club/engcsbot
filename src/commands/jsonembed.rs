@@ -86,13 +86,14 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
         return;
     }
 
+    // log the json in case a vulnerability is found
+    discord_log!(
+        &ctx.http,
+        "attempting to serialize the following json\n```json\n{json}\n```"
+    );
+
     match serde_json::from_str::<JsonEmbed>(json) {
         Ok(embed) => {
-            // log the json in case a vulnerability is found
-            discord_log!(
-                &ctx.http,
-                "A successful json embed has been sent\n```json\n{json}```"
-            );
 
             let msg = CreateInteractionResponseMessage::new().embed(embed.build_embed());
 
