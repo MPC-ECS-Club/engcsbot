@@ -54,12 +54,12 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
         .title("🗓️ Upcoming Meetings")
         .color(Color::ORANGE)
         .field("Monday", mondays, false)
-        .field("Tuesdays", tuesdays, false)
-        .field("Wednesdays", wednesdays, false)
-        .field("Thursdays", thursdays, false)
-        .field("Fridays", fridays, false)
-        .field("Saturdays", saturdays, false)
-        .field("Sundays", sundays, false);
+        .field("Tuesday", tuesdays, false)
+        .field("Wednesday", wednesdays, false)
+        .field("Thursday", thursdays, false)
+        .field("Friday", fridays, false)
+        .field("Saturday", saturdays, false)
+        .field("Sunday", sundays, false);
 
     let msg = CreateInteractionResponseMessage::new().embed(embed);
 
