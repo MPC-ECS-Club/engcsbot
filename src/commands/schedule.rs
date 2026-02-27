@@ -66,6 +66,7 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
         start: (start_hour, start_minute),
         end: (end_hour, end_minute),
         onetime,
+        day_before_announced: false,
     };
 
     // if ScheduleManager::has_meeting(&sch).await {

@@ -1,5 +1,24 @@
 # EngCS Bot
 
+# Commands
+| Feature           | Status | Note                                                                                    |
+|-------------------|--------|-----------------------------------------------------------------------------------------|
+| `/info`           | ✅      | View information about the bot                                                          |
+| `/upcoming`       | ✅      | View upcoming meetings for this week                                                    |
+| *`/announce`      | ✅      | Send a manual announcement with some formatting (sends as an embed)                     |
+| *`/schedule`      | ✅      | Schedule a new weekly meeting                                                           |
+| *`/cancelday`     | ✅      | Cancel an entire day of meetings.                                                       |
+| *`/removemeeting` | ✅      | Remove a specific meeting entirely                                                      |
+| `/jsonembed`      | ✅      | Allows you to create a custom embed with many options (**todo**: documentation missing) |
+| *`/shutdown`      | ✅      | Shutdown the bot if necessary                                                           |
+
+\* These commands require adminstrator permission to run.
+
+# TODO list
+- Lot's of `unwrap()` calls. Clean this up
+- Give `ScheduledMeeting` a UID, so that it  can be tracked easier.
+- Add ability to attach a 'note' to a meeting that will be posted alongside an automatic announcement.
+
 ## Running normally
 The following will run the bot in release mode with the given token
 I recommend using a separate token/bot when running in debug mode so that
@@ -14,8 +33,8 @@ Once SSH'd into the rasp-pi, make a folder for the bot.
 
 On your development computer install `cross` (`cargo install cross`) and its dependencies (such as docker, see docs for cross) and the
 target for the raspberry pi `rustup target add aarch64-unknown-linux-gnu`
-You may also need to install other dependencies, on Arch Linux for example, `pacman -S aarch64-linux-gnu-gcc` is necessary. 
-The Cargo.toml file is set up with the assumption that `aarch64-linux-gnu-gcc` is present.
+You may also need to install other dependencies, on Arch Linux for example, `pacman -S aarch64-linux-gnu-gcc` is necessary.
+Cross should handle these dependencies though, so just try compiling with cross first.
 
 Once compiled (ideally in release mode), transfer the binary to the raspberry pi via ssh <br> 
 (`scp target/aarch64-unknown-linux-gnu/release/engcsbot pi-hostname@pi-ipaddr:~/path-to-bot/engcsbot`)

@@ -31,6 +31,7 @@ pub enum SchedulingError {
     MeetingAlreadyExists,
 }
 
+// Note: This struct is serialized using serde_json! Be careful when renaming fields, since that will break old save files from being loaded.
 #[derive(Serialize, Deserialize, Debug, Hash, PartialEq, Eq, Clone)]
 pub struct ScheduledMeeting {
     pub day: Weekday,
@@ -38,6 +39,7 @@ pub struct ScheduledMeeting {
     pub start: (u32, u32),
     pub end: (u32, u32),
     pub onetime: bool,
+    pub day_before_announced: bool,
 }
 
 impl ScheduledMeeting {
