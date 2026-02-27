@@ -38,6 +38,7 @@ pub struct ScheduledMeeting {
     pub start: (u32, u32),
     pub end: (u32, u32),
     pub onetime: bool,
+    pub day_before_announed: bool,
 }
 
 impl ScheduledMeeting {

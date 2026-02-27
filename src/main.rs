@@ -15,7 +15,7 @@ use serenity::{
     prelude::*,
 };
 use std::convert::Into;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::process::exit;
 use std::sync::Arc;
@@ -87,6 +87,41 @@ fn get_clock_emoji_for_hour(hour: u32) -> &'static str {
     }
 }
 
+async fn check_if_should_announce_day_before(http: impl CacheHttp, chan: ChannelId, dt: DateTime<Local>, meeting: &mut ScheduledMeeting) -> bool {
+    if meeting.day_before_announed {
+        return false;
+    }
+    
+    let weekday = dt.weekday();
+    
+    if weekday != meeting.day.pred() {
+        return false;
+    }
+    
+    if dt.hour() >= 9 {
+        meeting.day_before_announed = true;
+
+        let emoji = get_clock_emoji_for_hour(meeting.start.0);
+        let when_field = format!("{} {emoji}", to_12_hr_clock_str(meeting.start));
+
+        let message = CreateMessage::new()
+            .content("@everyone") // blame jordi
+            .add_embed(CreateEmbed::new()
+                .title("Meeting notice!")
+                .color(Color::PURPLE)
+                .description(format!("This is a notice for an upcoming meeting tomorrow ({}).", meeting.day))
+                .field("Location", &meeting.location, true)
+                .field("When? ", &when_field, true)
+            );
+
+        _ = chan.send_message(&http, message).await;
+
+        return true;
+    }
+
+    return false;
+}
+
 struct Handler;
 
 // TODO: cleanup
@@ -101,7 +136,14 @@ async fn start_time_checking_loop(ctx: Context) {
         let mut to_remove: Vec<usize> = vec![];
 
         let mut meetings = ScheduleManager::get_schedule().await;
-        for (i, meeting) in meetings.deref().iter().enumerate() {
+        let mut reload_save_data = false;
+        
+        for (i, meeting) in meetings.deref_mut().iter_mut().enumerate() {
+            if check_if_should_announce_day_before(&ctx.http, chan, dt, meeting).await {
+                reload_save_data = true;
+                continue;
+            }
+            
             if meeting.day != weekday {
                 continue;
             }
@@ -125,6 +167,7 @@ async fn start_time_checking_loop(ctx: Context) {
                 && dt.minute() >= (ANNOUNCEMENT_EPSILON_MINS + start_min)
             {
                 // meeting!
+                meeting.day_before_announed = false; // reset this!
 
                 let meet_time = set_today_to_hr_min_sec(start_hr, start_min, 0);
                 let seconds_since_epoch = meet_time.timestamp();
@@ -170,6 +213,12 @@ async fn start_time_checking_loop(ctx: Context) {
             .iter()
             .rev()
             .for_each(|i| _ = meetings.swap_remove(*i));
+
+        drop(meetings);
+
+        if reload_save_data {
+            saveutil::save_all_meetings().await;
+        }
     }
 }
 
