@@ -12,7 +12,7 @@ use uuid::Uuid;
 pub async fn run(ctx: &Context, cmd: CommandInteraction) {
     let options = &cmd.data.options;
 
-    let Some(note) = &options.first().unwrap().value.as_str() else {
+    let Some(note) = &options.first().iter().flat_map(|value| value.value.as_str()).next() else {
         return;
     };
     let uuid = &options

@@ -57,7 +57,6 @@ impl ScheduledMeeting {
         } else {
             7 + meeting - today
         };
-
         let desired = now
             .add(chrono::Duration::days(diff as i64))
             .with_hour(self.start.0)

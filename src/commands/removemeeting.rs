@@ -11,13 +11,13 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
     let options = &cmd.data.options;
 
     // kinda of an error-prone approach, perhaps make some utility to help with this.
-    let Some(day) = &options.first().unwrap().value.as_str() else {
+    let Some(day) = &options.first().iter().flat_map(|value| value.value.as_str()).next() else {
         return;
     };
-    let Some(start) = &options.get(1).unwrap().value.as_str() else {
+    let Some(start) = &options.get(1).iter().flat_map(|value| value.value.as_str()).next() else {
         return;
     };
-    let Some(end) = &options.get(2).unwrap().value.as_str() else {
+    let Some(end) = &options.get(2).iter().flat_map(|value| value.value.as_str()).next() else {
         return;
     };
     let onetime = options

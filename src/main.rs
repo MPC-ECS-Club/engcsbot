@@ -374,14 +374,15 @@ where
     }
 }
 
-pub fn set_today_to_hr_min_sec(hr: u32, min: u32, sec: u32) -> DateTime<Local> {
-    Local::now()
-        .with_hour(hr)
-        .unwrap()
-        .with_minute(min)
-        .unwrap()
+pub fn set_day_to_hr_min_sec(dt: DateTime<Local>, hr: u32, min: u32, sec: u32) -> Option<DateTime<Local>> {
+    dt
+        .with_hour(hr)?
+        .with_minute(min)?
         .with_second(sec)
-        .unwrap()
+}
+
+pub fn set_today_to_hr_min_sec(hr: u32, min: u32, sec: u32) -> DateTime<Local> {
+    set_day_to_hr_min_sec(Local::now(), hr, min, sec).expect("invalid date time.")
 }
 
 pub fn to_12_hr_clock_str(clock: (u32, u32)) -> String {

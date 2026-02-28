@@ -28,7 +28,7 @@ async fn shutdown(ctx: &Context, cmd: CommandInteraction) {
     println!("SHUTTING DOWN!");
 
     let data = ctx.data.read().await;
-    let shard_manager = data.get::<ClientShardManager>().unwrap();
+    let shard_manager = data.get::<ClientShardManager>().expect("missing ClientShardManager in context data");
     shard_manager.shutdown_all().await;
 
     println!("Goodnight!");

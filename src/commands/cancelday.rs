@@ -10,7 +10,7 @@ use serenity::all::{
 pub async fn run(ctx: &Context, cmd: CommandInteraction) {
     let options = &cmd.data.options;
 
-    let Some(day) = options.first().unwrap().value.as_str() else {
+    let Some(day) = options.first().iter().flat_map(|value| value.value.as_str()).next() else {
         return;
     };
 
