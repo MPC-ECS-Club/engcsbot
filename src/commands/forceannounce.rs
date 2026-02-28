@@ -17,6 +17,7 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
     make_announcement(ChannelId::new(ANNOUNCEMENT_CHANNEL_ID), ctx, &meet).await;
 }
 
+#[allow(unused)]
 pub fn register() -> CreateCommand {
     CreateCommand::new("forceannounce").description("Force an announcement (TESTING ONLY)")
 }

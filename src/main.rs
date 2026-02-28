@@ -21,8 +21,10 @@ use std::process::exit;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::File;
-use tokio::io::AsyncBufReadExt;
 use uuid::Uuid;
+
+#[cfg(debug_assertions)]
+use tokio::io::AsyncBufReadExt;
 
 const ANNOUNCEMENT_EPSILON_MINS: u32 = 0;
 
