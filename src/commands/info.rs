@@ -21,6 +21,5 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
 }
 
 pub fn register() -> CreateCommand {
-    CreateCommand::new("info")
-        .description("Retrieve information related to this discord bot")
+    CreateCommand::new("info").description("Retrieve information related to this discord bot")
 }

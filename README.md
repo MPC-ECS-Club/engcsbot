@@ -1,23 +1,24 @@
 # EngCS Bot
 
 # Commands
-| Feature           | Status | Note                                                                                    |
-|-------------------|--------|-----------------------------------------------------------------------------------------|
-| `/info`           | ✅      | View information about the bot                                                          |
-| `/upcoming`       | ✅      | View upcoming meetings for this week                                                    |
-| *`/announce`      | ✅      | Send a manual announcement with some formatting (sends as an embed)                     |
-| *`/schedule`      | ✅      | Schedule a new weekly meeting                                                           |
-| *`/cancelday`     | ✅      | Cancel an entire day of meetings.                                                       |
-| *`/removemeeting` | ✅      | Remove a specific meeting entirely                                                      |
-| `/jsonembed`      | ✅      | Allows you to create a custom embed with many options (**todo**: documentation missing) |
-| *`/shutdown`      | ✅      | Shutdown the bot if necessary                                                           |
+| Feature            | Status | Note                                                                                    |
+|--------------------|--------|-----------------------------------------------------------------------------------------|
+| `/info`            | ✅      | View information about the bot                                                          |
+| `/upcoming`        | ✅      | View upcoming meetings for this week                                                    |
+| *`/announce`       | ✅      | Send a manual announcement with some formatting (sends as an embed)                     |
+| *`/schedule`       | ✅      | Schedule a new weekly meeting                                                           |
+| *`/cancelday`      | ✅      | Cancel an entire day of meetings.                                                       |
+| *`/removemeeting`  | ✅      | Remove a specific meeting entirely                                                      |
+| `/jsonembed`       | ✅      | Allows you to create a custom embed with many options (**todo**: documentation missing) |
+| *`/shutdown`       | ✅      | Shutdown the bot if necessary                                                           |
+| *`/setnote`        | ✅      | Add a note to a meeting                                                                 |
+| **`/forceannounce` | ✅      | Force an announcement of the next upcoming meeting                                      |
 
-\* These commands require adminstrator permission to run.
+\* These commands require adminstrator permission to run.<br>
+\** Only available in debug mode
 
 # TODO list
 - Lot's of `unwrap()` calls. Clean this up
-- Give `ScheduledMeeting` a UID, so that it  can be tracked easier.
-- Add ability to attach a 'note' to a meeting that will be posted alongside an automatic announcement.
 
 ## Running normally
 The following will run the bot in release mode with the given token

@@ -3,15 +3,16 @@ use chrono::{DateTime, Datelike, Local, Timelike, Weekday};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::ops::{Add, Deref};
+use std::ops::{Add, Deref, DerefMut};
 use std::sync::LazyLock;
 use tokio::sync::{Mutex, MutexGuard};
+use uuid::Uuid;
 
 static SCHEDULED: LazyLock<Mutex<Vec<ScheduledMeeting>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
 // probably not the best way to do this, but who cares.
 // mapping from Meeting => unix timestamp of when it should be rescheduled.
-static TEMPORARILY_SUSPENDED: LazyLock<Mutex<HashMap<ScheduledMeeting, Suspended>>> =
+static TEMPORARILY_SUSPENDED: LazyLock<Mutex<HashMap<Uuid, Suspended>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash)]
@@ -34,12 +35,14 @@ pub enum SchedulingError {
 // Note: This struct is serialized using serde_json! Be careful when renaming fields, since that will break old save files from being loaded.
 #[derive(Serialize, Deserialize, Debug, Hash, PartialEq, Eq, Clone)]
 pub struct ScheduledMeeting {
+    pub uuid: Uuid,
     pub day: Weekday,
     pub location: String,
     pub start: (u32, u32),
     pub end: (u32, u32),
     pub onetime: bool,
     pub day_before_announced: bool,
+    pub note: Option<String>,
 }
 
 impl ScheduledMeeting {
@@ -79,6 +82,39 @@ impl ScheduledMeeting {
 pub struct ScheduleManager;
 
 impl ScheduleManager {
+    pub async fn set_note(u: Uuid, s: String) {
+        let mut schedule = Self::get_schedule().await;
+
+        let meet = schedule.deref_mut().iter_mut().find(|x| x.uuid == u);
+        if let Some(meet) = meet {
+            meet.note = Some(s);
+        }
+    }
+
+    pub async fn get_by_uuid(u: Uuid) -> Option<ScheduledMeeting> {
+        // TODO: use a hashmap internally, although there aren't that many meetings in general so whatever
+        Self::get_schedule()
+            .await
+            .iter()
+            .find(|s| s.uuid == u)
+            .cloned()
+    }
+
+    pub async fn get_closest_future_meeting() -> Option<ScheduledMeeting> {
+        let meeting = Self::get_schedule().await;
+
+        meeting
+            .iter()
+            .reduce(|a, b| {
+                if a.get_datetime_of_next() < b.get_datetime_of_next() {
+                    a
+                } else {
+                    b
+                }
+            })
+            .cloned()
+    }
+
     pub async fn remove_matching(
         day: Weekday,
         start: (u32, u32),
@@ -100,7 +136,7 @@ impl ScheduleManager {
         let total = meetings_to_remove.len();
 
         meetings_to_remove.iter().rev().for_each(|(idx, meeting)| {
-            temp_sus.remove(meeting);
+            temp_sus.remove(&meeting.uuid);
             schedule.swap_remove(*idx);
         });
 
@@ -111,9 +147,9 @@ impl ScheduleManager {
         SCHEDULED.lock().await
     }
 
-    pub async fn set_already_announced(meeting: ScheduledMeeting, restore_at: i64) {
+    pub async fn set_already_announced(meeting: &ScheduledMeeting, restore_at: i64) {
         TEMPORARILY_SUSPENDED.lock().await.insert(
-            meeting,
+            meeting.uuid,
             Suspended {
                 reason: SuspendReason::AlreadyAnnounced,
                 reschedule: restore_at,
@@ -122,19 +158,22 @@ impl ScheduleManager {
     }
 
     pub async fn is_already_announced(meeting: &ScheduledMeeting) -> bool {
-        TEMPORARILY_SUSPENDED.lock().await.contains_key(meeting)
+        TEMPORARILY_SUSPENDED
+            .lock()
+            .await
+            .contains_key(&meeting.uuid)
     }
 
     pub async fn get_suspension_restore_timestamp(meeting: &ScheduledMeeting) -> i64 {
         TEMPORARILY_SUSPENDED
             .lock()
             .await
-            .get(meeting)
+            .get(&meeting.uuid)
             .map(|v| v.reschedule)
             .unwrap_or(-1)
     }
 
-    pub async fn get_suspension_map() -> MutexGuard<'static, HashMap<ScheduledMeeting, Suspended>> {
+    pub async fn get_suspension_map() -> MutexGuard<'static, HashMap<Uuid, Suspended>> {
         TEMPORARILY_SUSPENDED.lock().await
     }
 
@@ -147,7 +186,7 @@ impl ScheduleManager {
             .unwrap();
 
         TEMPORARILY_SUSPENDED.lock().await.insert(
-            meeting,
+            meeting.uuid,
             Suspended {
                 reason: SuspendReason::Cancelled,
                 reschedule: when.timestamp(),
@@ -163,12 +202,12 @@ impl ScheduleManager {
         TEMPORARILY_SUSPENDED
             .lock()
             .await
-            .get(meeting)
+            .get(&meeting.uuid)
             .is_some_and(|val| val.reason == SuspendReason::Cancelled)
     }
 
     pub async fn unsuspend(meeting: &ScheduledMeeting) {
-        TEMPORARILY_SUSPENDED.lock().await.remove(meeting);
+        TEMPORARILY_SUSPENDED.lock().await.remove(&meeting.uuid);
     }
 
     // pub async fn remove_meeting(meeting: &ScheduledMeeting) {

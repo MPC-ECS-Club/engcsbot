@@ -14,6 +14,7 @@ use serenity::{
     async_trait,
     prelude::*,
 };
+use std::collections::HashMap;
 use std::convert::Into;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
@@ -22,6 +23,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::File;
 use tokio::io::AsyncBufReadExt;
+use uuid::Uuid;
 
 const ANNOUNCEMENT_EPSILON_MINS: u32 = 0;
 
@@ -136,6 +138,49 @@ async fn check_if_should_announce_day_before(
 
 struct Handler;
 
+async fn make_announcement(chan: ChannelId, ctx: &Context, meeting: &ScheduledMeeting) {
+    let (start_hr, start_min) = meeting.start;
+    let meet_time = set_today_to_hr_min_sec(start_hr, start_min, 0);
+    let seconds_since_epoch = meet_time.timestamp();
+
+    let (end_hr, end_min) = meeting.end;
+
+    let meeting_end_epoch_time = set_today_to_hr_min_sec(end_hr, end_min, 0).timestamp();
+
+    let mut embed = CreateEmbed::new()
+        .title("🎉 Meeting Alert 🚨")
+        .description(format!(
+            "There will be a meeting today <t:{seconds_since_epoch}:R>"
+        ))
+        .color(Color::DARK_GREEN)
+        .field("Location 🪐", &meeting.location, true)
+        .field(
+            format!("Until {}", get_clock_emoji_for_hour(end_hr)),
+            format!("<t:{meeting_end_epoch_time}:t>"),
+            true,
+        )
+        .footer(CreateEmbedFooter::new(format!(
+            "Please react to this message if you plan on attending!\n{AUTOMATION_NOTICE_MESSAGE}"
+        )));
+
+    if let Some(note) = &meeting.note {
+        embed = embed.field("Note", note.as_str(), false);
+    }
+
+    let msg = CreateMessage::new().content("@everyone").embed(embed);
+
+    if let Ok(msg) = chan.send_message(&ctx.http, msg).await
+        && let Err(why) = msg
+            .react(&ctx.http, ReactionType::Unicode("\u{2705}".into()))
+            .await
+    {
+        discord_log!(
+            &ctx.http,
+            "failed to send automatic announcement, or reaction to it. {why:?}"
+        );
+    }
+}
+
 // TODO: cleanup
 async fn start_time_checking_loop(ctx: Context) {
     let chan = ChannelId::new(ANNOUNCEMENT_CHANNEL_ID);
@@ -181,43 +226,16 @@ async fn start_time_checking_loop(ctx: Context) {
                 // meeting!
                 meeting.day_before_announced = false;
                 reload_save_data = true;
-
-                let meet_time = set_today_to_hr_min_sec(start_hr, start_min, 0);
-                let seconds_since_epoch = meet_time.timestamp();
-
-                let (end_hr, end_min) = meeting.end;
-
-                let meeting_end_epoch_time =
-                    set_today_to_hr_min_sec(end_hr, end_min, 0).timestamp();
-
-                let msg = CreateMessage::new()
-                    .content("@everyone")
-                    .embed(CreateEmbed::new()
-                        .title("🎉 Meeting Alert 🚨")
-                        .description(format!("There will be a meeting today <t:{seconds_since_epoch}:R>"))
-                        .color(Color::DARK_GREEN)
-                        .field("Location 🪐", &meeting.location, true)
-                        .field(format!("Until {}", get_clock_emoji_for_hour(end_hr)), format!("<t:{meeting_end_epoch_time}:t>"), true)
-                        .footer(CreateEmbedFooter::new(format!("Please react to this message if you plan on attending!\n{AUTOMATION_NOTICE_MESSAGE}")))
-                );
-
-                if let Ok(msg) = chan.send_message(&ctx.http, msg).await
-                    && let Err(why) = msg
-                        .react(&ctx.http, ReactionType::Unicode("\u{2705}".into()))
-                        .await
-                {
-                    discord_log!(
-                        &ctx.http,
-                        "failed to send automatic announcement, or reaction to it. {why:?}"
-                    );
-                }
+                make_announcement(chan, &ctx, meeting).await;
+                meeting.note = None;
 
                 if meeting.onetime {
                     to_remove.push(i);
                 } else {
-                    // maybe avoid this clone, doesn't really matter it's not *that* expensive, and it doesn't occur that often.
-                    ScheduleManager::set_already_announced(meeting.clone(), meeting_end_epoch_time)
-                        .await;
+                    let (end_hr, end_min) = meeting.end;
+                    let meeting_end_epoch_time =
+                        set_today_to_hr_min_sec(end_hr, end_min, 0).timestamp();
+                    ScheduleManager::set_already_announced(meeting, meeting_end_epoch_time).await;
                 }
             }
         }
@@ -356,17 +374,22 @@ async fn load_save_data(ctx: &Context) {
         .unwrap_or("".to_string());
 
     // so yeah, this is ugly, maybe refactor sometime so this isn't all a mess.
-    if let Ok(data) = serde_json::from_str::<Vec<(ScheduledMeeting, Suspended)>>(&json) {
+    if let Ok(data) = serde_json::from_str::<HashMap<Uuid, Suspended>>(&json) {
         let schedule = ScheduleManager::get_schedule().await;
         let mut temp_sus = ScheduleManager::get_suspension_map().await;
 
         let mut count = 0usize;
-        for (meet, sus) in data {
-            if !schedule.contains(&meet) || is_suspension_done(sus.reschedule) {
+        for (meeting_uuid, sus) in data {
+            let meet = schedule.iter().find(|v| v.uuid == meeting_uuid);
+            let Some(meet) = meet else {
+                continue;
+            };
+
+            if is_suspension_done(sus.reschedule) {
                 continue;
             }
 
-            temp_sus.insert(meet, sus);
+            temp_sus.insert(meet.uuid, sus);
             count += 1;
         }
         println!("loaded {} suspended meetings", count);
@@ -413,6 +436,16 @@ impl EventHandler for Handler {
         Command::create_global_command(&ctx.http, commands::jsonembed::register())
             .await
             .expect("jsonembed command");
+        Command::create_global_command(&ctx.http, commands::setnote::register())
+            .await
+            .expect("setnote command");
+
+        #[cfg(debug_assertions)]
+        {
+            Command::create_global_command(&ctx.http, commands::forceannounce::register())
+                .await
+                .expect("forceannounce command");
+        }
 
         println!("commands registered successfully!");
 
@@ -508,6 +541,18 @@ impl EventHandler for Handler {
                 "jsonembed" => {
                     with_timeout(async move {
                         commands::jsonembed::run(&ctx, cmd).await;
+                    })
+                    .await
+                }
+                "setnote" => {
+                    with_timeout(async move {
+                        commands::setnote::run(&ctx, cmd).await;
+                    })
+                    .await
+                }
+                "forceannounce" => {
+                    with_timeout(async move {
+                        commands::forceannounce::run(&ctx, cmd).await;
                     })
                     .await
                 }

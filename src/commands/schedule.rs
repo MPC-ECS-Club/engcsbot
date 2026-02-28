@@ -1,14 +1,14 @@
 use crate::commands::util;
+use crate::data::saveutil;
+use crate::data::scheduled_meeting::{ScheduleManager, ScheduledMeeting};
+use crate::discord_log;
 use chrono::Weekday;
 use serenity::all::{
     CommandDataOptionValue, CommandInteraction, CommandOptionType, Context, CreateCommand,
     CreateCommandOption, InteractionContext,
 };
 use std::str::FromStr;
-
-use crate::data::saveutil;
-use crate::data::scheduled_meeting::{ScheduleManager, ScheduledMeeting};
-use crate::discord_log;
+use uuid::Uuid;
 
 pub async fn run(ctx: &Context, cmd: CommandInteraction) {
     if !util::is_user_admin(&cmd.member).await {
@@ -61,12 +61,14 @@ pub async fn run(ctx: &Context, cmd: CommandInteraction) {
     }
 
     let sch = ScheduledMeeting {
+        uuid: Uuid::new_v4(),
         day,
         location: location.clone(),
         start: (start_hour, start_minute),
         end: (end_hour, end_minute),
         onetime,
         day_before_announced: false,
+        note: None,
     };
 
     // if ScheduleManager::has_meeting(&sch).await {
