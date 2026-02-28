@@ -1,6 +1,7 @@
 use crate::commands::util;
 use crate::data::scheduled_meeting::ScheduleManager;
-use crate::{make_announcement, ANNOUNCEMENT_CHANNEL_ID};
+use crate::periodic::announcements::make_announcement;
+use crate::{ANNOUNCEMENT_CHANNEL_ID};
 use serenity::all::{
     ChannelId, CommandInteraction, Context
     ,

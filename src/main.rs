@@ -1,14 +1,14 @@
 mod commands;
 mod data;
+mod periodic;
 
 use crate::data::saveutil;
 use crate::data::scheduled_meeting::{ScheduleManager, ScheduledMeeting, Suspended};
-use chrono::{DateTime, Datelike, Local, Timelike};
+use chrono::{DateTime, Local, Timelike};
 use serenity::all::{
-    ActivityData, Color, Command, CommandId, CreateEmbedFooter, CreateMessage, GuildId,
-    Interaction, OnlineStatus, ReactionType, Ready, ShardManager,
+    Command, CommandId, CreateMessage, GuildId,
+    Interaction, Ready, ShardManager,
 };
-use serenity::builder::CreateEmbed;
 use serenity::{
     all::{ChannelId, Message},
     async_trait,
@@ -16,7 +16,6 @@ use serenity::{
 };
 use std::collections::HashMap;
 use std::convert::Into;
-use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::process::exit;
 use std::sync::Arc;
@@ -32,11 +31,6 @@ const MEETING_JSON_PATH: &str = "./bot-storage/meetings.json";
 const SUSPENDED_JSON_PATH: &str = "./bot-storage/suspended.json";
 
 const LOG_CHANNEL_ID: ChannelId = ChannelId::new(1470495355329183744);
-
-#[cfg(not(debug_assertions))]
-const STATUSES: &[&str] = &["engineering...", "programming...", "procrastinating..."];
-#[cfg(not(debug_assertions))]
-const STATUS_TIME: Duration = Duration::from_mins(2);
 
 #[cfg(debug_assertions)]
 const ANNOUNCEMENT_CHANNEL_ID: u64 = 839277529511755786;
@@ -91,203 +85,9 @@ fn get_clock_emoji_for_hour(hour: u32) -> &'static str {
     }
 }
 
-async fn check_if_should_announce_day_before(
-    http: impl CacheHttp,
-    chan: ChannelId,
-    dt: DateTime<Local>,
-    meeting: &mut ScheduledMeeting,
-) -> bool {
-    if meeting.day_before_announced {
-        return false;
-    }
-
-    let weekday = dt.weekday();
-
-    if weekday != meeting.day.pred() {
-        return false;
-    }
-
-    if dt.hour() >= 9 {
-        meeting.day_before_announced = true;
-
-        let emoji = get_clock_emoji_for_hour(meeting.start.0);
-        let when_field = format!("{} {emoji}", to_12_hr_clock_str(meeting.start));
-
-        let message = CreateMessage::new()
-            .content("@everyone") // blame jordi
-            .add_embed(
-                CreateEmbed::new()
-                    .title("Meeting Notice 📒")
-                    .color(Color::PURPLE)
-                    .description(format!(
-                        "This is a notice for an upcoming meeting ***tomorrow*** ({}).",
-                        meeting.day
-                    ))
-                    .field("Location 🪐", &meeting.location, true)
-                    .field("Time ", &when_field, true)
-                    .footer(CreateEmbedFooter::new(AUTOMATION_NOTICE_MESSAGE)),
-            );
-
-        _ = chan.send_message(&http, message).await;
-
-        return true;
-    }
-
-    false
-}
 
 struct Handler;
 
-async fn make_announcement(chan: ChannelId, ctx: &Context, meeting: &ScheduledMeeting) {
-    let (start_hr, start_min) = meeting.start;
-    let meet_time = set_today_to_hr_min_sec(start_hr, start_min, 0);
-    let seconds_since_epoch = meet_time.timestamp();
-
-    let (end_hr, end_min) = meeting.end;
-
-    let meeting_end_epoch_time = set_today_to_hr_min_sec(end_hr, end_min, 0).timestamp();
-
-    let mut embed = CreateEmbed::new()
-        .title("🎉 Meeting Alert 🚨")
-        .description(format!(
-            "There will be a meeting today <t:{seconds_since_epoch}:R>"
-        ))
-        .color(Color::DARK_GREEN)
-        .field("Location 🪐", &meeting.location, true)
-        .field(
-            format!("Until {}", get_clock_emoji_for_hour(end_hr)),
-            format!("<t:{meeting_end_epoch_time}:t>"),
-            true,
-        )
-        .footer(CreateEmbedFooter::new(format!(
-            "Please react to this message if you plan on attending!\n{AUTOMATION_NOTICE_MESSAGE}"
-        )));
-
-    if let Some(note) = &meeting.note {
-        embed = embed.field("Note", note.as_str(), false);
-    }
-
-    let msg = CreateMessage::new().content("@everyone").embed(embed);
-
-    if let Ok(msg) = chan.send_message(&ctx.http, msg).await
-        && let Err(why) = msg
-            .react(&ctx.http, ReactionType::Unicode("\u{2705}".into()))
-            .await
-    {
-        discord_log!(
-            &ctx.http,
-            "failed to send automatic announcement, or reaction to it. {why:?}"
-        );
-    }
-}
-
-// TODO: cleanup
-async fn start_time_checking_loop(ctx: Context) {
-    let chan = ChannelId::new(ANNOUNCEMENT_CHANNEL_ID);
-    loop {
-        tokio::time::sleep(UPDATE_RATE).await;
-
-        let dt = Local::now();
-        let weekday = dt.weekday();
-
-        let mut to_remove: Vec<usize> = vec![];
-
-        let mut meetings = ScheduleManager::get_schedule().await;
-        let mut reload_save_data = false;
-
-        for (i, meeting) in meetings.deref_mut().iter_mut().enumerate() {
-            if check_if_should_announce_day_before(&ctx.http, chan, dt, meeting).await {
-                reload_save_data = true;
-                continue;
-            }
-
-            if meeting.day != weekday {
-                continue;
-            }
-            if ScheduleManager::is_already_announced(meeting).await {
-                continue;
-            }
-
-            let (start_hr, start_min) = meeting.start;
-
-            // this prevents the underflow, although it would mean that we would be checking an hour before,
-            // since we skip any meetings not on the current day
-            // I highly doubt we'll have midnight meetings, so I won't fix this,
-            // but I'll leave this message here so it is documented.
-            let desired_hr_to_check = if start_hr == 0 {
-                start_hr
-            } else {
-                start_hr - 1
-            };
-
-            if dt.hour() == desired_hr_to_check
-                && dt.minute() >= (ANNOUNCEMENT_EPSILON_MINS + start_min)
-            {
-                // meeting!
-                meeting.day_before_announced = false;
-                reload_save_data = true;
-                make_announcement(chan, &ctx, meeting).await;
-                meeting.note = None;
-
-                if meeting.onetime {
-                    to_remove.push(i);
-                } else {
-                    let (end_hr, end_min) = meeting.end;
-                    let meeting_end_epoch_time =
-                        set_today_to_hr_min_sec(end_hr, end_min, 0).timestamp();
-                    ScheduleManager::set_already_announced(meeting, meeting_end_epoch_time).await;
-                }
-            }
-        }
-
-        to_remove
-            .iter()
-            .rev()
-            .for_each(|i| _ = meetings.swap_remove(*i));
-
-        drop(meetings);
-
-        if reload_save_data {
-            saveutil::save_all_meetings().await;
-        }
-    }
-}
-
-fn is_suspension_done(reset_timestamp: i64) -> bool {
-    let now = Local::now().timestamp();
-
-    reset_timestamp != -1 && now > reset_timestamp
-}
-
-// Returns whether or not the suspend.json file should be refreshed.
-async fn reset_suspended_if_necessary(meeting: &ScheduledMeeting) -> bool {
-    let time = ScheduleManager::get_suspension_restore_timestamp(meeting).await;
-
-    let mut should_refresh = false;
-    if is_suspension_done(time) {
-        // maybe don't lock again, and just store the map?
-        should_refresh = true;
-        ScheduleManager::unsuspend(meeting).await;
-    }
-
-    should_refresh
-}
-
-async fn reset_announced_state() {
-    tokio::time::sleep(UPDATE_RATE.div_f64(2.0)).await; // offset from  regular update rate
-
-    loop {
-        tokio::time::sleep(UPDATE_RATE).await;
-
-        for meeting in ScheduleManager::get_schedule().await.deref() {
-            let should_refresh = reset_suspended_if_necessary(meeting).await;
-            if should_refresh {
-                println!("refreshing suspend.json");
-                saveutil::save_suspended().await;
-            }
-        }
-    }
-}
 
 #[cfg(debug_assertions)]
 async fn bot_shell(ctx: Context) {
@@ -331,6 +131,26 @@ async fn bot_shell(ctx: Context) {
             _ => (),
         };
     }
+}
+
+fn is_suspension_done(reset_timestamp: i64) -> bool {
+    let now = Local::now().timestamp();
+
+    reset_timestamp != -1 && now > reset_timestamp
+}
+
+// Returns whether or not the suspend.json file should be refreshed.
+async fn reset_suspended_if_necessary(meeting: &ScheduledMeeting) -> bool {
+    let time = ScheduleManager::get_suspension_restore_timestamp(meeting).await;
+
+    let mut should_refresh = false;
+    if is_suspension_done(time) {
+        // maybe don't lock again, and just store the map?
+        should_refresh = true;
+        ScheduleManager::unsuspend(meeting).await;
+    }
+
+    should_refresh
 }
 
 // certainly not the prettiest function
@@ -449,39 +269,10 @@ impl EventHandler for Handler {
 
         println!("commands registered successfully!");
 
-        {
-            let ctx = ctx.clone();
-            tokio::spawn(async move {
-                start_time_checking_loop(ctx).await;
-            });
-        }
-
-        tokio::spawn(async {
-            reset_announced_state().await;
-        });
-
-        #[cfg(debug_assertions)]
-        {
-            ctx.set_presence(
-                Some(ActivityData::playing("debug mode")),
-                OnlineStatus::Online,
-            );
-        }
-        #[cfg(not(debug_assertions))]
-        {
-            let ctx = ctx.clone();
-            tokio::spawn(async move {
-                let mut i = 0usize;
-                loop {
-                    let desired = STATUSES[i];
-                    ctx.set_presence(Some(ActivityData::custom(desired)), OnlineStatus::Online);
-
-                    i = (i + 1) % STATUSES.len();
-                    tokio::time::sleep(STATUS_TIME).await;
-                }
-            });
-        }
-
+        periodic::announcements::start(ctx.clone());
+        periodic::reset_state::start(ctx.clone());
+        periodic::status_manager::start(ctx.clone());
+        
         #[cfg(debug_assertions)]
         {
             let ctx = ctx.clone();
