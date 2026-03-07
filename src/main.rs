@@ -3,10 +3,11 @@ mod data;
 mod periodic;
 
 use crate::data::saveutil;
-use crate::data::scheduled_meeting::{ScheduleManager, ScheduledMeeting, Suspended};
+use crate::data::scheduled_meeting::{ScheduleManager, Suspended};
+use crate::periodic::reset_state::is_suspension_done;
 use chrono::{DateTime, Local, Timelike};
 use serenity::all::{
-    Command, CommandId, CreateMessage, GuildId,
+    Command, CreateMessage, GuildId,
     Interaction, Ready, ShardManager,
 };
 use serenity::{
@@ -22,9 +23,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::File;
 use uuid::Uuid;
-
-#[cfg(debug_assertions)]
-use tokio::io::AsyncBufReadExt;
 
 const ANNOUNCEMENT_EPSILON_MINS: u32 = 0;
 
@@ -87,73 +85,51 @@ fn get_clock_emoji_for_hour(hour: u32) -> &'static str {
     }
 }
 
-
 struct Handler;
 
-
-#[cfg(debug_assertions)]
-async fn bot_shell(ctx: Context) {
-    let stdin = tokio::io::stdin();
-    let mut reader = tokio::io::BufReader::new(stdin);
-    loop {
-        let mut buf = String::new();
-        if let Err(why) = reader.read_line(&mut buf).await {
-            eprintln!("failed to read from stdin: {}", why);
-        }
-        let buf = buf.trim();
-        println!(">> {buf}");
-
-        match buf {
-            "delete-commands" => {
-                // for debugging
-                println!("deleting commands");
-                if let Err(why) = Command::set_global_commands(&ctx.http, vec![]).await {
-                    eprintln!("failed to set global commands: {:?}", why);
-                }
-                // let cmds = Command::get_global_commands(&ctx.http).await;
-                // let Ok(cmds) = cmds else {
-                //     continue;
-                // };
-                //
-                // for cmd in cmds {
-                //     _ = Command::delete_global_command(&ctx.http, cmd.id).await;
-                // }
-                println!("done.");
-            }
-            "delete-cmd-id" => {
-                println!("enter desired id:");
-                let mut buf = String::new();
-                reader.read_line(&mut buf).await.unwrap();
-                buf = buf.trim().to_string();
-                let id: u64 = buf.parse().unwrap();
-                println!("deleting...");
-                _ = Command::delete_global_command(&ctx.http, CommandId::new(id)).await;
-                println!("done.");
-            }
-            _ => (),
-        };
-    }
-}
-
-fn is_suspension_done(reset_timestamp: i64) -> bool {
-    let now = Local::now().timestamp();
-
-    reset_timestamp != -1 && now > reset_timestamp
-}
-
-// Returns whether or not the suspend.json file should be refreshed.
-async fn reset_suspended_if_necessary(meeting: &ScheduledMeeting) -> bool {
-    let time = ScheduleManager::get_suspension_restore_timestamp(meeting).await;
-
-    let mut should_refresh = false;
-    if is_suspension_done(time) {
-        // maybe don't lock again, and just store the map?
-        should_refresh = true;
-        ScheduleManager::unsuspend(meeting).await;
-    }
-
-    should_refresh
-}
+// #[cfg(debug_assertions)]
+// async fn bot_shell(ctx: Context) {
+//     let stdin = tokio::io::stdin();
+//     let mut reader = tokio::io::BufReader::new(stdin);
+//     loop {
+//         let mut buf = String::new();
+//         if let Err(why) = reader.read_line(&mut buf).await {
+//             eprintln!("failed to read from stdin: {}", why);
+//         }
+//         let buf = buf.trim();
+//         println!(">> {buf}");
+//
+//         match buf {
+//             "delete-commands" => {
+//                 // for debugging
+//                 println!("deleting commands");
+//                 if let Err(why) = Command::set_global_commands(&ctx.http, vec![]).await {
+//                     eprintln!("failed to set global commands: {:?}", why);
+//                 }
+//                 // let cmds = Command::get_global_commands(&ctx.http).await;
+//                 // let Ok(cmds) = cmds else {
+//                 //     continue;
+//                 // };
+//                 //
+//                 // for cmd in cmds {
+//                 //     _ = Command::delete_global_command(&ctx.http, cmd.id).await;
+//                 // }
+//                 println!("done.");
+//             }
+//             "delete-cmd-id" => {
+//                 println!("enter desired id:");
+//                 let mut buf = String::new();
+//                 reader.read_line(&mut buf).await.unwrap();
+//                 buf = buf.trim().to_string();
+//                 let id: u64 = buf.parse().unwrap();
+//                 println!("deleting...");
+//                 _ = Command::delete_global_command(&ctx.http, CommandId::new(id)).await;
+//                 println!("done.");
+//             }
+//             _ => (),
+//         };
+//     }
+// }
 
 // certainly not the prettiest function
 async fn load_save_data(ctx: &Context) {
@@ -274,14 +250,14 @@ impl EventHandler for Handler {
         periodic::announcements::start(ctx.clone());
         periodic::reset_state::start(ctx.clone());
         periodic::status_manager::start(ctx.clone());
-        
-        #[cfg(debug_assertions)]
-        {
-            let ctx = ctx.clone();
-            tokio::spawn(async move {
-                bot_shell(ctx).await;
-            });
-        }
+
+        // #[cfg(debug_assertions)]
+        // {
+        //     let ctx = ctx.clone();
+        //     tokio::spawn(async move {
+        //         bot_shell(ctx).await;
+        //     });
+        // }
 
         discord_log!(&ctx.http, "Ready!");
     }
@@ -376,15 +352,14 @@ where
     }
 }
 
-pub fn set_day_to_hr_min_sec(dt: DateTime<Local>, hr: u32, min: u32, sec: u32) -> Option<DateTime<Local>> {
-    dt
-        .with_hour(hr)?
-        .with_minute(min)?
-        .with_second(sec)
-}
-
 pub fn set_today_to_hr_min_sec(hr: u32, min: u32, sec: u32) -> DateTime<Local> {
-    set_day_to_hr_min_sec(Local::now(), hr, min, sec).expect("invalid date time.")
+    Local::now()
+        .with_hour(hr)
+        .unwrap()
+        .with_minute(min)
+        .unwrap()
+        .with_second(sec)
+        .unwrap()
 }
 
 pub fn to_12_hr_clock_str(clock: (u32, u32)) -> String {

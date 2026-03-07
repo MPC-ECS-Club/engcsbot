@@ -18,7 +18,7 @@ If there is an issue with the bot, or you would like to submit feedback, send a 
 
 pub async fn run(ctx: &Context, cmd: CommandInteraction) {
     let msg = CreateInteractionResponseMessage::new()
-        .content(&get_info())
+        .content(get_info())
         .ephemeral(true);
 
     let builder = CreateInteractionResponse::Message(msg);
