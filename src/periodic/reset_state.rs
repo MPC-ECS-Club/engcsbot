@@ -1,9 +1,9 @@
-use std::ops::Deref;
-use chrono::Local;
+use chrono::{Datelike, Local};
 use serenity::all::Context;
+use std::ops::DerefMut;
 
-use crate::{UPDATE_RATE, data::{saveutil, scheduled_meeting::ScheduleManager}};
 use crate::data::scheduled_meeting::ScheduledMeeting;
+use crate::{data::{saveutil, scheduled_meeting::ScheduleManager}, UPDATE_RATE};
 
 pub fn is_suspension_done(reset_timestamp: i64) -> bool {
     let now = Local::now().timestamp();
@@ -29,13 +29,30 @@ async fn reset_announced_state() {
 
     loop {
         tokio::time::sleep(UPDATE_RATE).await;
+        let now = Local::now();
 
-        for meeting in ScheduleManager::get_schedule().await.deref() {
-            let should_refresh = reset_suspended_if_necessary(meeting).await;
-            if should_refresh {
-                println!("refreshing suspend.json");
-                saveutil::save_suspended().await;
+        let mut should_refresh_suspended = false;
+        let mut should_refresh_meetings = false;
+
+        for meeting in ScheduleManager::get_schedule().await.deref_mut() {
+            let fresh = reset_suspended_if_necessary(meeting).await;
+
+            if meeting.day_before_announced && now.weekday() != meeting.day.pred() {
+                meeting.day_before_announced = false;
+                should_refresh_meetings = true;
             }
+
+            should_refresh_suspended = should_refresh_suspended || fresh;
+        }
+
+        if should_refresh_suspended {
+            println!("refreshing suspend.json");
+            saveutil::save_suspended().await;
+        }
+
+        if should_refresh_meetings {
+            println!("refreshing meetings.json");
+            saveutil::save_all_meetings().await;
         }
     }
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 hostname="$1"
+nostart="$2"
 
 function fatal() {
   echo -e "$1"
@@ -39,9 +40,13 @@ SSHPASS="$password" sshpass -e ssh "$hostname" "chmod +x ~/discordbots/engcsbot/
   || fatal "failed to make new version executable"
 
 
-#echo "Starting the bot"
-#SSHPASS="$password" sshpass -e ssh "$hostname" "sudo systemctl start engcsbot" \
-#  || fatal "failed to start updated bot"
+if [[ "$nostart" == "nostart" ]]; then
+  echo "No start specified, leaving bot off (note, if a reboot occurs, the bot will restart)"
+else
+  echo "Starting the bot"
+  SSHPASS="$password" sshpass -e ssh "$hostname" "sudo systemctl start engcsbot" \
+    || fatal "failed to start updated bot"
+fi;
 
 echo "Done"
 

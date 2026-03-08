@@ -4,7 +4,7 @@ use serenity::all::{ActivityData, Context, OnlineStatus};
 use std::time::Duration;
 
 #[cfg(not(debug_assertions))]
-const STATUSES: &[&str] = &["engineering...", "programming...", "procrastinating..."];
+const STATUSES: &[&str] = &["engineering...", "programming...", "procrastinating...", "flying...", "networking...", "inspiring..."];
 #[cfg(not(debug_assertions))]
 const STATUS_TIME: Duration = Duration::from_mins(2);
 
