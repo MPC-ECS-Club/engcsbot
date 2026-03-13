@@ -6,7 +6,7 @@ use std::time::Duration;
 #[cfg(not(debug_assertions))]
 const STATUSES: &[&str] = &["engineering...", "programming...", "procrastinating...", "flying...", "networking...", "inspiring..."];
 #[cfg(not(debug_assertions))]
-const STATUS_TIME: Duration = Duration::from_mins(2);
+const STATUS_TIME: Duration = Duration::from_hours(1);
 
 async fn run(ctx: Context) {
     #[cfg(debug_assertions)]
