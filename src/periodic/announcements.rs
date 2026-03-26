@@ -109,15 +109,16 @@ async fn start_time_checking_loop(ctx: Context) {
         let mut reload_save_data = false;
 
         for (i, meeting) in meetings.deref_mut().iter_mut().enumerate() {
+            if ScheduleManager::is_suspended(meeting).await {
+                continue;
+            }
+
             if check_if_should_announce_day_before(&ctx.http, chan, dt, meeting).await {
                 reload_save_data = true;
                 continue;
             }
 
             if meeting.day != weekday {
-                continue;
-            }
-            if ScheduleManager::is_already_announced(meeting).await {
                 continue;
             }
 

@@ -156,7 +156,7 @@ impl ScheduleManager {
         );
     }
 
-    pub async fn is_already_announced(meeting: &ScheduledMeeting) -> bool {
+    pub async fn is_suspended(meeting: &ScheduledMeeting) -> bool {
         TEMPORARILY_SUSPENDED
             .lock()
             .await
